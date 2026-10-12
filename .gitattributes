@@ -1,0 +1,2 @@
+# Keep engine and integrity-verifier bytes stable on every supported host.
+* text=auto eol=lf

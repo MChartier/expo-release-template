@@ -1,0 +1,11 @@
+{
+  "name": "expo-release-template",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs packages/release-engine/test/*.test.mjs",
+    "sync": "node scripts/sync-engine.mjs"
+  }
+}

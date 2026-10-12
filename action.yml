@@ -1,0 +1,18 @@
+# Verifies a consumer engine against this exact downloaded action revision without cross-repository credentials.
+name: Verify shared Expo release engine
+description: Check the consumer lock and every vendored engine byte against the pinned upstream action.
+inputs:
+  target:
+    description: Consumer repository root relative to the current workspace
+    default: '.'
+    required: false
+runs:
+  using: composite
+  steps:
+    - name: Verify the pinned engine snapshot
+      shell: bash
+      env:
+        RELEASE_ENGINE_SOURCE: ${{ github.action_path }}
+        RELEASE_ENGINE_REVISION: ${{ github.action_ref }}
+        RELEASE_ENGINE_TARGET: ${{ inputs.target }}
+      run: node "$RELEASE_ENGINE_SOURCE/scripts/verify-engine.mjs" --target "$RELEASE_ENGINE_TARGET" --source "$RELEASE_ENGINE_SOURCE" --revision "$RELEASE_ENGINE_REVISION"
