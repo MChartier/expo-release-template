@@ -5,7 +5,7 @@
   "type": "module",
   "engines": { "node": ">=20" },
   "scripts": {
-    "test": "node --test test/*.test.mjs packages/release-engine/test/*.test.mjs",
+    "test": "node --test",
     "sync": "node scripts/sync-engine.mjs"
   }
 }

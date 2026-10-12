@@ -5,5 +5,5 @@
   "type": "module",
   "engines": { "node": ">=20" },
   "exports": { ".": { "types": "./index.d.mts", "import": "./index.mjs" } },
-  "scripts": { "test": "node --test test/*.test.mjs" }
+  "scripts": { "test": "node --test" }
 }

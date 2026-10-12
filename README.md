@@ -57,9 +57,9 @@ release-engine:
   uses: MChartier/expo-release-template/.github/workflows/release-contract.yml@FULL_40_CHARACTER_COMMIT
 ```
 
-Use the same full commit in the lock, action, and reusable workflow. This private repository must allow its actions/workflows to be used by the consumer repositories in GitHub Actions access settings. Consumers do not need a cross-repository PAT or a new GitHub App.
+Use the same full commit in the lock, action, and reusable workflow. This public template supports both public and private consumers without a cross-repository PAT or a new GitHub App.
 
-The action verifies against its downloaded upstream code, not merely against a self-authored local lock. The reusable job runs with read-only permissions and no publication secrets. Existing application release workers retain job-scoped signing, attestation, publishing, and approval environments.
+The action verifies against its downloaded upstream code, not merely against a self-authored local lock. The reusable job checks local snapshot consistency and runs contract tests with read-only permissions and no publication secrets; use both jobs for authoritative verification. Existing application release workers retain job-scoped signing, attestation, publishing, and approval environments.
 
 ## Update an existing consumer
 

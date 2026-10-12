@@ -2,7 +2,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArguments, snapshotDigest, snapshotPath, verifySnapshot } from './verify-engine.mjs';
@@ -34,9 +34,11 @@ export function committedSnapshot(source, revision) {
 /** Replace only a verified managed snapshot; refuse untracked destinations or locally modified managed files. */
 export async function syncEngine({ source = defaultSource, revision, target } = {}) {
   if (!target) throw new Error('A consumer repository target is required.');
-  const targetRoot = resolve(target);
-  const gitRoot = git(targetRoot, ['rev-parse', '--show-toplevel']).toString().trim();
-  if (resolve(gitRoot).toLowerCase() !== targetRoot.toLowerCase()) throw new Error('Target must be the consumer repository root.');
+  // Resolve Windows short paths and directory aliases before comparing Git's canonical checkout root.
+  const targetRoot = await realpath(resolve(target));
+  const gitRoot = await realpath(git(targetRoot, ['rev-parse', '--show-toplevel']).toString().trim());
+  const comparable = value => process.platform === 'win32' ? value.toLowerCase() : value;
+  if (comparable(gitRoot) !== comparable(targetRoot)) throw new Error('Target must be the consumer repository root.');
   const { files, verifier } = committedSnapshot(resolve(source), revision);
   const root = resolve(targetRoot, 'tools/release-engine');
   const lockPath = resolve(targetRoot, 'release-engine.lock.json');
@@ -44,16 +46,29 @@ export async function syncEngine({ source = defaultSource, revision, target } = 
     const info = await lstat(resolve(targetRoot, 'tools'));
     if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('Consumer tools must be a real directory.');
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  let previous;
-  try { previous = JSON.parse(await readFile(lockPath, 'utf8')); }
+  let lockInfo;
+  try { lockInfo = await lstat(lockPath); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
-  if (previous) await verifySnapshot({ target: targetRoot });
+  let previous;
+  if (lockInfo) {
+    if (!lockInfo.isFile() || lockInfo.isSymbolicLink()) throw new Error('Engine lock must be a regular file, never a symbolic link.');
+    previous = JSON.parse(await readFile(lockPath, 'utf8'));
+    if (!previous || typeof previous !== 'object' || Array.isArray(previous)) throw new Error('Invalid release engine lock.');
+    await verifySnapshot({ target: targetRoot });
+  }
   else {
     for (const path of [root, resolve(targetRoot, 'tools/verify-release-engine.mjs')]) {
       try { await lstat(path); throw new Error(`Unmanaged destination already exists: ${path}`); }
       catch (error) { if (error.code !== 'ENOENT') throw error; }
     }
   }
+  const attributesPath = resolve(targetRoot, '.gitattributes');
+  let attributes = '';
+  try {
+    const attributesInfo = await lstat(attributesPath);
+    if (!attributesInfo.isFile() || attributesInfo.isSymbolicLink()) throw new Error('Consumer Git attributes must be a regular file, never a symbolic link.');
+    attributes = await readFile(attributesPath, 'utf8');
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
   await mkdir(root, { recursive: true });
   for (const name of Object.keys(previous?.files || {})) {
     if (!(name in files)) await unlink(snapshotPath(root, name));
@@ -67,12 +82,6 @@ export async function syncEngine({ source = defaultSource, revision, target } = 
   const hashes = Object.fromEntries(Object.entries(files).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([name, content]) => [name, sha256(content)]));
   const lock = { schemaVersion: 1, repository, revision, packageVersion: JSON.parse(files['package.json'].toString()).version, digest: snapshotDigest(hashes), verifierDigest: sha256(verifier), files: hashes };
   await writeFile(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
-  const attributesPath = resolve(targetRoot, '.gitattributes');
-  let attributes = '';
-  try {
-    if ((await lstat(attributesPath)).isSymbolicLink()) throw new Error('Consumer Git attributes must not be a symbolic link.');
-    attributes = await readFile(attributesPath, 'utf8');
-  } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const directives = ['tools/release-engine/** -text', 'tools/verify-release-engine.mjs -text'];
   const missing = directives.filter(line => !attributes.split(/\r?\n/).includes(line));
   if (missing.length) await writeFile(attributesPath, `${attributes.replace(/\s*$/, '')}\n\n# Preserve the shared release engine snapshot byte-for-byte across platforms.\n${missing.join('\n')}\n`);

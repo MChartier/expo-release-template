@@ -45,6 +45,15 @@ test('installs committed bytes and verifies them against the authoritative revis
   assert.deepEqual(await syncEngine(f), result);
 });
 
+test('accepts a repository root reached through a directory alias', async () => {
+  const f = await fixture();
+  const alias = join(f.source, 'consumer-alias');
+  await symlink(f.target, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  const result = await syncEngine({ ...f, target: alias });
+  assert.equal(result.revision, f.revision);
+  assert.deepEqual(await verifySnapshot(f), result);
+});
+
 test('refuses to overwrite locally modified managed files', async () => {
   const f = await fixture();
   await syncEngine(f);
@@ -80,6 +89,34 @@ test('rejects existing unmanaged destination and linked tools directory', async 
   const next = await fixture();
   await mkdir(join(next.target, 'tools/release-engine'), { recursive: true });
   await assert.rejects(syncEngine(next), /Unmanaged destination/);
+});
+
+test('rejects a linked falsy lock before modifying any consumer or outside file', async (t) => {
+  const f = await fixture();
+  const outside = join(f.source, 'outside-lock.json');
+  await writeFile(outside, 'null\n');
+  try {
+    await symlink(outside, join(f.target, 'release-engine.lock.json'), 'file');
+  } catch (error) {
+    if (process.platform === 'win32' && error.code === 'EPERM') {
+      t.skip('Windows requires symlink privilege for this file-link fixture; Linux CI verifies it.');
+      return;
+    }
+    throw error;
+  }
+  await assert.rejects(syncEngine(f), /lock.*regular|lock.*symbolic|regular.*lock/i);
+  assert.equal(await readFile(outside, 'utf8'), 'null\n');
+  await assert.rejects(readFile(join(f.target, 'tools/release-engine/index.mjs')), { code: 'ENOENT' });
+});
+
+test('an existing falsy lock is corrupt managed state rather than a first installation', async () => {
+  const f = await fixture();
+  for (const invalid of ['null', 'false', '0', '""']) {
+    await writeFile(join(f.target, 'release-engine.lock.json'), `${invalid}\n`);
+    await assert.rejects(syncEngine(f));
+    assert.equal(await readFile(join(f.target, 'release-engine.lock.json'), 'utf8'), `${invalid}\n`);
+    await assert.rejects(readFile(join(f.target, 'tools/release-engine/index.mjs')), { code: 'ENOENT' });
+  }
 });
 
 test('path validation rejects traversal, alternate data streams, and platform-dependent separators', () => {
