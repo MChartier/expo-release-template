@@ -10,6 +10,7 @@ The engine standardizes decisions and recovery contracts. Repository adapters re
 | Native/server dependency | Repository's effective input identity decides | Paired version metadata changes shipped server diagnostics | Declare real artifact dependencies; do not hide shipped metadata |
 | OTA destinations | Per profile, platform, and supported compatible runtime | Independently tracked internal and production phone OTA | Fingerprint compatibility plus a separate bundle/environment baseline |
 | Store sequencing | Exact selected Android/iOS builds for store distribution | Verified phone enqueue, phone completion, then Wear submission | Successful native artifact before enqueue; verified enqueue before OTA; completion required before final success |
+| Android testing destinations | Existing `internal` track with draft release status | Owner-confirmed `internal` and `wear:internal` IDs | Read back exact configured IDs; never infer API aliases from display labels |
 | Production protection | Repository's distribution and credential configuration | Existing protected production OTA approval and explicit store promotion | Keep approval and credential policy in repository adapters |
 | Publication transport | Existing hosted EAS command jobs; source subprocess environments exclude publication tokens | Credential-free export jobs and separate trusted artifact publishers | Provider adapters own credentials; engine code requires none |
 | Recovery storage | Append-only assets in run-scoped draft GitHub Releases | Run-scoped retained artifacts and append-only checkpoints | Original immutable plan, exact bytes, provider IDs, explicit unknown-outcome reconciliation |
@@ -20,6 +21,8 @@ Little Say's application configuration remains in `release.json`, `native-releas
 Both consumers vendor the exact engine bytes under `tools/release-engine/`, record their source revision in `release-engine.lock.json`, and use a commit-pinned verification action and reusable contract-test workflow. This keeps privileged and sparse-checkout workers reproducible without a registry token. A toolkit update is an explicit reviewed consumer change, not a floating dependency.
 
 The shared library does not create a credential boundary by itself. Little Say retains its hosted EAS transport, including export and publication in the same job; excluding tokens from source subprocess environments is not equivalent to Calibrate's separate export and publisher runners. New adapters should use the separated artifact-worker model in the adapter contract.
+
+Calibrate's rollout exposed adapter requirements now included in the shared contract: stable fingerprints after compiler-generated files appear, exact named-artifact extraction paths, original-run recovery after interrupted retention, isolated draft-release inspection, and explicit reconciliation of a rejected request before correcting its destination. These checks preserve completed server work and retained native binaries while publication remains paused. Repository rollout records, rather than this template, own the current source, version reservations, provider IDs, and historical signer allowlist.
 
 ## Add another Expo app
 
