@@ -50,7 +50,7 @@ Its receipt proves the service reported a healthy deployment; it does not attest
 
 ## Credential boundaries
 
-Build/export and candidate validation do not receive publication credentials. Privileged workers consume verified retained artifacts and trusted pinned tooling. Keep Android signing protection, production OTA approval, explicit production store promotion, and current image attestation verification.
+For new adapters, run build/export and candidate validation without publication credentials, and have separate privileged workers consume verified retained artifacts with trusted pinned tooling. Keep Android signing protection, production OTA approval, explicit production store promotion, and current image attestation verification. Existing consumer transport differences are recorded in [the consumer mapping](consumers.md); the shared engine does not itself isolate a runner or process.
 
 Do not recreate the removed signed-native-tag or dedicated GitHub-App prerequisite for OTA. Expo runtime compatibility and a verified selected build/submission handoff are the relevant integrated release prerequisites.
 
