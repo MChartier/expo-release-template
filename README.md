@@ -25,6 +25,7 @@ Native runtime identity, application versions, build numbers, OTA channel, EAS e
 - `.github/workflows/release-contract.yml`: reusable read-only contract tests for consumer repositories.
 - `examples/expo-only.mjs`: working selection and ordering example without a server, Wear, deployment secrets, or store submission.
 - `docs/adapters.md`: adapter responsibilities and migration rules.
+- `docs/consumers.md`: Little Say/Calibrate policy differences and guidance for another Expo app.
 
 ## Start a new consumer
 
