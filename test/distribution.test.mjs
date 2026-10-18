@@ -8,6 +8,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
+// Cold Windows runners need extra time to unpack and repack the bundled provider graph.
+const npmTimeout = process.platform === 'win32' ? 10 * 60 * 1000 : 5 * 60 * 1000;
+const installTestTimeout = process.platform === 'win32' ? 30 * 60 * 1000 : 10 * 60 * 1000;
 const root = fileURLToPath(new URL('../', import.meta.url));
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const shrinkwrap = JSON.parse(fs.readFileSync(path.join(root, 'npm-shrinkwrap.json'), 'utf8'));
@@ -25,7 +28,7 @@ function npmCli() {
   throw new Error('Run distribution checks through npm test or an installed Node/npm distribution.');
 }
 
-function npm(args, cwd, timeout = 300000, environment = {}) {
+function npm(args, cwd, timeout = npmTimeout, environment = {}) {
   return execFileSync(process.execPath, [npmCli(), ...args], { cwd, encoding: 'utf8', windowsHide: true, timeout,
     stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024,
     env: { ...process.env, npm_config_audit: 'false', npm_config_fund: 'false', npm_config_update_notifier: 'false', ...environment } });
@@ -91,7 +94,7 @@ test('packed distribution ships executable modules, declarations and shrinkwrap 
 });
 
 test('clean installed package preserves shrinkwrapped runtime graph, executable EAS and independent Expo helper',
-  { skip: process.env.EXPO_RELEASE_DISTRIBUTION_TEST !== '1', timeout: 600000 }, t => {
+  { skip: process.env.EXPO_RELEASE_DISTRIBUTION_TEST !== '1', timeout: installTestTimeout }, t => {
     const directory = temporary(t); const packed = pack(directory); const consumer = path.join(directory, 'consumer');
     fs.mkdirSync(consumer); fs.writeFileSync(path.join(consumer, 'package.json'), JSON.stringify({ private: true, dependencies: { [manifest.name]: `file:${packed.tarball.replaceAll('\\', '/')}` } }));
     npm(['install', '--package-lock-only', '--ignore-scripts'], consumer);
@@ -111,7 +114,7 @@ test('clean installed package preserves shrinkwrapped runtime graph, executable 
   });
 
 test('fresh full-SHA Git consumers install the exact runtime with normal and ignored scripts, without lifecycle compilation',
-  { skip: process.env.EXPO_RELEASE_DISTRIBUTION_TEST !== '1', timeout: 600000 }, t => {
+  { skip: process.env.EXPO_RELEASE_DISTRIBUTION_TEST !== '1', timeout: installTestTimeout }, t => {
     const directory = temporary(t); const packed = pack(directory); const repository = path.join(directory, 'source');
     fs.mkdirSync(repository);
     for (const item of packed.files.filter(item => !item.path.startsWith('node_modules/'))) {
@@ -128,9 +131,9 @@ test('fresh full-SHA Git consumers install the exact runtime with normal and ign
       const cache = path.join(directory, ignore ? 'cache-ignored' : 'cache-normal');
       const environment = { npm_config_cache: cache, npm_config_foreground_scripts: 'true' };
       const flags = ignore ? ['--ignore-scripts'] : [];
-      const output = npm(['install', ...flags], consumer, 300000, environment);
+      const output = npm(['install', ...flags], consumer, npmTimeout, environment);
       assert(!/\bnode-gyp\b|\bnode-gyp-build\b/.test(output), 'Git dependency preparation attempted native compilation.');
-      npm(['ci', ...flags], consumer, 300000, environment);
+      npm(['ci', ...flags], consumer, npmTimeout, environment);
       const installed = path.join(consumer, 'node_modules/@mchartier/expo-release');
       const { verified } = verifyRuntimeGraph(installed);
       assert.deepEqual(createRequire(path.join(consumer, 'package.json'))('@mchartier/expo-release/expo').runtimeVersion('fingerprint'), { policy: 'fingerprint' });
