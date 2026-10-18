@@ -11,11 +11,11 @@ const classify = file => file.startsWith('tools/release-engine/') || file === 't
   : /(?:package-lock|release-engine.lock)\.json$/.test(file) ? 'generated' : file.endsWith('.md') ? 'documentation'
   : file.startsWith('.github/workflows/') ? 'workflow' : file.includes('.test.') || file.includes('/fixtures/') ? 'test'
   : file.endsWith('.json') ? 'configuration' : 'implementation';
-const extra = ['package.json', 'package-lock.json', 'mobile/eas.json', 'mobile/app.config.js', 'mobile/fingerprint.config.js', 'mobile/app.config.test.cjs',
+const extra = ['quality/release-acceptance-plan.json', 'package.json', 'package-lock.json', 'mobile/eas.json', 'mobile/app.config.js', 'mobile/fingerprint.config.js', 'mobile/app.config.test.cjs',
   'scripts/native-setup.mjs', 'scripts/native-setup.test.mjs', 'scripts/native-toolchain.mjs', 'scripts/native-install.mjs', 'scripts/native-install.test.mjs',
   'scripts/native-artifact-checks.mjs', 'scripts/native-runtime-checks.mjs', 'scripts/native-upgrade-rehearsal.mjs', 'scripts/native-upgrade-rehearsal.test.mjs',
   'scripts/release-hooks.mjs', 'scripts/release-hooks.test.mjs', 'scripts/release-inputs.mjs', 'scripts/release-metadata.mjs', 'release.config.json',
-  '.github/workflows/release-engine.yml', '.github/workflows/release-request.yml', '.github/workflows/release-handler.yml',
+  '.github/workflows/release-engine.yml', '.github/workflows/release-acceptance.yml', '.github/workflows/release-request.yml', '.github/workflows/release-handler.yml',
   'docs/shared-release-engine.md', 'docs/release-migration.md', 'docs/release-migration-removals.md'];
 for (const file of [...migration.removedConsumerFiles, ...extra]) if (!scope.has(file)) scope.set(file, classify(file));
 // Mixed-purpose files count toward net authored change, separately from dedicated release implementation/YAML.

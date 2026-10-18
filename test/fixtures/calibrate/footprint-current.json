@@ -2,31 +2,31 @@
   "schemaVersion": 1,
   "baseline": "2e8def677fff5e4ff486565218ed5d9afcc4498b",
   "method": "Physical lines including blank/comment lines. Full dedicated release files and relocated builders/hooks/tooling remain in scope. Mixed CI/docs/root files are supplemental and count in net authored totals. Generated locks and vendored engine copies are separate; neither contributes to implementation reduction.",
-  "pendingRemovalCount": 84,
+  "pendingRemovalCount": 0,
   "totals": {
     "implementationConfigurationWorkflow": {
-      "before": 18362,
-      "current": 20038,
-      "afterRemoval": 6204
+      "before": 18565,
+      "current": 6325,
+      "afterRemoval": 6325
     },
     "releaseWorkflow": {
-      "before": 5123,
-      "current": 5106,
-      "afterRemoval": 56
+      "before": 5204,
+      "current": 71,
+      "afterRemoval": 71
     },
     "authored": {
-      "before": 35648,
-      "current": 37138,
-      "afterRemoval": 13750
+      "before": 35851,
+      "current": 13897,
+      "afterRemoval": 13897
     },
     "generated": {
       "before": 18986,
-      "current": 19011,
-      "afterRemoval": 12452
+      "current": 19923,
+      "afterRemoval": 19923
     },
     "vendored": {
       "before": 0,
-      "current": 1187,
+      "current": 0,
       "afterRemoval": 0
     }
   },
@@ -70,14 +70,14 @@
       "path": ".github/workflows/container-handler.yml",
       "category": "workflow",
       "before": 121,
-      "current": 121,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": ".github/workflows/container-request.yml",
       "category": "workflow",
       "before": 81,
-      "current": 81,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -91,28 +91,28 @@
       "path": ".github/workflows/container.yml",
       "category": "workflow",
       "before": 937,
-      "current": 937,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": ".github/workflows/cut-release-handler.yml",
       "category": "workflow",
       "before": 135,
-      "current": 135,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": ".github/workflows/cut-release-request.yml",
       "category": "workflow",
       "before": 78,
-      "current": 78,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": ".github/workflows/cut-release.yml",
       "category": "workflow",
       "before": 1271,
-      "current": 1274,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -133,14 +133,14 @@
       "path": ".github/workflows/deploy-self-hosted.yml",
       "category": "workflow",
       "before": 91,
-      "current": 91,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": ".github/workflows/expo-ota-update.yml",
       "category": "workflow",
       "before": 1019,
-      "current": 1055,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -154,42 +154,42 @@
       "path": ".github/workflows/native-build.yml",
       "category": "workflow",
       "before": 236,
-      "current": 238,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": ".github/workflows/native-release.yml",
       "category": "workflow",
       "before": 85,
-      "current": 86,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": ".github/workflows/native-submit.yml",
       "category": "workflow",
       "before": 76,
-      "current": 77,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": ".github/workflows/publish-release-handler.yml",
       "category": "workflow",
       "before": 152,
-      "current": 152,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": ".github/workflows/publish-release-request.yml",
       "category": "workflow",
       "before": 113,
-      "current": 113,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": ".github/workflows/publish-release.yml",
       "category": "workflow",
       "before": 339,
-      "current": 339,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -200,10 +200,17 @@
       "afterRemoval": 10
     },
     {
+      "path": ".github/workflows/release-acceptance.yml",
+      "category": "workflow",
+      "before": 81,
+      "current": 13,
+      "afterRemoval": 13
+    },
+    {
       "path": ".github/workflows/release-components.yml",
       "category": "workflow",
       "before": 263,
-      "current": 273,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -217,8 +224,8 @@
       "path": ".github/workflows/release-handler.yml",
       "category": "workflow",
       "before": 0,
-      "current": 22,
-      "afterRemoval": 22
+      "current": 24,
+      "afterRemoval": 24
     },
     {
       "path": ".github/workflows/release-request.yml",
@@ -259,7 +266,7 @@
       "path": "deploy/scripts/connect-and-deploy.mjs",
       "category": "implementation",
       "before": 108,
-      "current": 108,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -273,7 +280,7 @@
       "path": "deploy/test/connect-and-deploy.test.mjs",
       "category": "test",
       "before": 146,
-      "current": 146,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -378,8 +385,8 @@
       "path": "docs/release-migration.md",
       "category": "documentation",
       "before": 0,
-      "current": 0,
-      "afterRemoval": 0
+      "current": 26,
+      "afterRemoval": 26
     },
     {
       "path": "docs/release-scope.md",
@@ -476,15 +483,22 @@
       "path": "package-lock.json",
       "category": "generated",
       "before": 12452,
-      "current": 12452,
-      "afterRemoval": 12452
+      "current": 19923,
+      "afterRemoval": 19923
     },
     {
       "path": "package.json",
       "category": "configuration",
       "before": 131,
-      "current": 127,
-      "afterRemoval": 127
+      "current": 126,
+      "afterRemoval": 126
+    },
+    {
+      "path": "quality/release-acceptance-plan.json",
+      "category": "configuration",
+      "before": 122,
+      "current": 109,
+      "afterRemoval": 109
     },
     {
       "path": "README.md",
@@ -497,7 +511,7 @@
       "path": "release-engine.lock.json",
       "category": "generated",
       "before": 0,
-      "current": 25,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -511,28 +525,28 @@
       "path": "scripts/expo-ota-artifact.mjs",
       "category": "implementation",
       "before": 584,
-      "current": 584,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/expo-ota-artifact.test.mjs",
       "category": "test",
       "before": 315,
-      "current": 315,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/expo-ota-publish.mjs",
       "category": "implementation",
       "before": 56,
-      "current": 60,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/expo-ota-store.mjs",
       "category": "implementation",
       "before": 133,
-      "current": 143,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -553,28 +567,28 @@
       "path": "scripts/ghcr-release-policy.mjs",
       "category": "implementation",
       "before": 132,
-      "current": 132,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/ghcr-release-policy.test.mjs",
       "category": "test",
       "before": 156,
-      "current": 156,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/ghcr-release-receipt.mjs",
       "category": "implementation",
       "before": 403,
-      "current": 403,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/ghcr-release-receipt.test.mjs",
       "category": "test",
       "before": 400,
-      "current": 400,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -595,35 +609,35 @@
       "path": "scripts/native-config.mjs",
       "category": "implementation",
       "before": 217,
-      "current": 217,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-config.test.mjs",
       "category": "test",
       "before": 372,
-      "current": 372,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-eas-credentials.mjs",
       "category": "implementation",
       "before": 115,
-      "current": 115,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-eas-promote.mjs",
       "category": "implementation",
       "before": 91,
-      "current": 91,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-eas-submit.mjs",
       "category": "implementation",
       "before": 131,
-      "current": 186,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -644,85 +658,85 @@
       "path": "scripts/native-internal-release.mjs",
       "category": "implementation",
       "before": 368,
-      "current": 368,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-internal-release.test.mjs",
       "category": "test",
       "before": 223,
-      "current": 223,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-ota-contract.mjs",
       "category": "implementation",
       "before": 259,
-      "current": 259,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-ota-contract.test.mjs",
       "category": "test",
       "before": 320,
-      "current": 320,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-ota-update.mjs",
       "category": "implementation",
       "before": 337,
-      "current": 337,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-ota-update.test.mjs",
       "category": "test",
       "before": 244,
-      "current": 244,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-play-receipt.mjs",
       "category": "implementation",
       "before": 563,
-      "current": 563,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-play-receipt.test.mjs",
       "category": "test",
       "before": 279,
-      "current": 279,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-play-release.mjs",
       "category": "implementation",
       "before": 1155,
-      "current": 1155,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-play-release.test.mjs",
       "category": "test",
       "before": 1316,
-      "current": 1316,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-release-artifacts.mjs",
       "category": "implementation",
       "before": 136,
-      "current": 157,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-release-build.mjs",
       "category": "implementation",
       "before": 822,
-      "current": 837,
-      "afterRemoval": 837
+      "current": 835,
+      "afterRemoval": 835
     },
     {
       "path": "scripts/native-release-build.test.mjs",
@@ -784,14 +798,14 @@
       "path": "scripts/native-tag-attestation.mjs",
       "category": "implementation",
       "before": 484,
-      "current": 484,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native-tag-attestation.test.mjs",
       "category": "test",
       "before": 496,
-      "current": 496,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -819,14 +833,14 @@
       "path": "scripts/native.mjs",
       "category": "implementation",
       "before": 177,
-      "current": 177,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/native.test.mjs",
       "category": "test",
       "before": 150,
-      "current": 150,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -847,70 +861,70 @@
       "path": "scripts/release-artifact-store.test.mjs",
       "category": "test",
       "before": 153,
-      "current": 153,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-ci-gate.mjs",
       "category": "implementation",
       "before": 261,
-      "current": 261,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-ci-gate.test.mjs",
       "category": "test",
       "before": 274,
-      "current": 274,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-config.mjs",
       "category": "implementation",
       "before": 1779,
-      "current": 1779,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-config.test.mjs",
       "category": "test",
       "before": 1755,
-      "current": 1755,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-engine.config.mjs",
       "category": "implementation",
       "before": 0,
-      "current": 25,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-engine.mjs",
       "category": "implementation",
       "before": 0,
-      "current": 219,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-engine.test.mjs",
       "category": "test",
       "before": 0,
-      "current": 195,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-handler-event.mjs",
       "category": "implementation",
       "before": 118,
-      "current": 118,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-handler-event.test.mjs",
       "category": "test",
       "before": 111,
-      "current": 111,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -945,70 +959,70 @@
       "path": "scripts/release-orchestrator.mjs",
       "category": "implementation",
       "before": 211,
-      "current": 214,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-orchestrator.test.mjs",
       "category": "test",
       "before": 189,
-      "current": 218,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-reconcile.mjs",
       "category": "implementation",
       "before": 74,
-      "current": 105,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-reconcile.test.mjs",
       "category": "test",
       "before": 105,
-      "current": 205,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-record.mjs",
       "category": "implementation",
       "before": 188,
-      "current": 177,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-request.mjs",
       "category": "implementation",
       "before": 181,
-      "current": 181,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-request.test.mjs",
       "category": "test",
       "before": 128,
-      "current": 128,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-selection.mjs",
       "category": "implementation",
       "before": 148,
-      "current": 153,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/release-workflow-contract.test.mjs",
       "category": "test",
       "before": 1898,
-      "current": 1898,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "scripts/unified-release-workflow.test.mjs",
       "category": "test",
       "before": 197,
-      "current": 200,
+      "current": 0,
       "afterRemoval": 0
     },
     {
@@ -1022,126 +1036,126 @@
       "path": "tools/eas-cli/package-lock.json",
       "category": "generated",
       "before": 6534,
-      "current": 6534,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/eas-cli/package.json",
       "category": "configuration",
       "before": 13,
-      "current": 13,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/artifacts.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 93,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/core.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 105,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/graph.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 134,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/index.d.mts",
       "category": "vendored",
       "before": 0,
-      "current": 136,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/index.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 7,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/operation.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 136,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/package.json",
       "category": "vendored",
       "before": 0,
-      "current": 9,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/selection.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 62,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/test/artifacts.test.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 59,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/test/core.test.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 40,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/test/graph.test.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 62,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/test/operation.test.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 151,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/test/selection.test.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 34,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/test/versions.test.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 25,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/release-engine/versions.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 36,
+      "current": 0,
       "afterRemoval": 0
     },
     {
       "path": "tools/verify-release-engine.mjs",
       "category": "vendored",
       "before": 0,
-      "current": 98,
+      "current": 0,
       "afterRemoval": 0
     }
   ]
