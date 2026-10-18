@@ -45,3 +45,14 @@ test('original local receipts block same-version native changes before and after
     fs.rmSync(baseline); assert.throws(() => localRuntimeGuard(input), /missing/);
   }
 });
+
+test('overlapping worktree builds cannot replace a successful runtime fingerprint', t => {
+  const input = fixture(t); const first = localRuntimeGuard(input);
+  const secondInput = { ...input, plan: structuredClone(input.plan) };
+  secondInput.plan.components[0].observation.fingerprint = 'c'.repeat(40);
+  const second = localRuntimeGuard(secondInput);
+  first.record();
+  assert.throws(() => second.record(), /new native version/);
+  localRuntimeGuard(input).record();
+  assert.throws(() => localRuntimeGuard(secondInput), /new native version/);
+});
