@@ -56,3 +56,11 @@ test('overlapping worktree builds cannot replace a successful runtime fingerprin
   localRuntimeGuard(input).record();
   assert.throws(() => localRuntimeGuard(secondInput), /new native version/);
 });
+
+test('paired native targets sharing an application ID retain independent local fingerprints', t => {
+  const input = fixture(t); input.plan.components[0].applicationId = 'app.paired';
+  input.plan.components.push({ ...input.plan.components[0], id: 'wear', observation: { ...input.plan.components[0].observation, fingerprint: 'd'.repeat(40) } });
+  localRuntimeGuard(input).record(); localRuntimeGuard(input);
+  input.plan.components[1].observation.fingerprint = 'e'.repeat(40);
+  assert.throws(() => localRuntimeGuard(input), /new native version/);
+});

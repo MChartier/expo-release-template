@@ -11,7 +11,7 @@ export function localRuntimeGuard({ plan, root, environment = process.env }) {
   const settingsFile = localSettingsPath(plan.config, root, environment);
   const directory = path.join(path.dirname(settingsFile), 'expo-release-runtimes');
   const key = component => hashIdentity({ repository: plan.source.repository, project: plan.providerConfiguration?.expo?.projectId ?? null,
-    application: component.applicationId ?? component.id, platform: component.platform, profile: plan.profile, runtime: component.observation.runtime });
+    application: component.applicationId ?? component.id, target: component.id, platform: component.platform, profile: plan.profile, runtime: component.observation.runtime });
   const read = component => {
     const file = path.join(directory, `${key(component)}.json`);
     if (!fs.existsSync(file)) return null;
