@@ -59,6 +59,8 @@ Source install, inspect, validation and export run without publication credentia
 
 Deployments are policy driven: a consumer may require deployment for server changes only, or for server/OTA work. Serverless configurations have no deploy stage or dummy deployment secrets. Runtime policy remains application owned: existing `appVersion` installations are not silently relabeled as fingerprint runtimes.
 
+The fixed workers support two native submission waves and two OTA publication waves. `after` sequences targets of the same kind; native handoff and deployment prerequisites come from the canonical stage model. Unsupported ordering is rejected during planning, before reserving or merging a candidate.
+
 Local `appVersion` builds keep a fingerprint collision guard beside the external machine settings: changed native inputs require a new native version, including across worktrees. Explicitly mapped original local receipts participate only in this rejection check. This local memory is not a publication ledger, a hosted baseline, or permission to promote local evidence; GitHub Releases and verified hosted receipts retain those roles.
 
 ## Recovery

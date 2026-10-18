@@ -124,7 +124,9 @@ test('OTA scheduling follows native handoff waves and build-only profiles before
 test('configuration rejects ignored publication constraints and conflicting version ownership', () => {
   const components = [{ id: 'server', kind: 'server' }, { id: 'phone', kind: 'native', platform: 'android', builder: 'eas' }];
   const config = { schemaVersion: 1, repository: 'fixture/app', defaultBranch: 'main', components };
-  assert.throws(() => validateConfig({ ...config, components: [{ ...components[0], after: ['phone'] }, components[1]] }), /predecessor kind/);
+  assert.throws(() => validateConfig({ ...config, components: [{ ...components[0], after: ['phone'] }, components[1]] }), /same kind/);
+  assert.throws(() => validateConfig({ ...config, components: [...components, { id: 'ota', kind: 'ota', platform: 'android', nativeTarget: 'phone',
+    channel: 'internal', environment: 'preview', after: ['server'] }] }), /same kind/);
   assert.throws(() => validateConfig({ ...config, versionGroups: [{ id: 'one', targets: ['phone'] }, { id: 'two', targets: ['phone'] }] }), /at most one version group/);
   assert.throws(() => validateConfig({ ...config, versionGroups: [{ id: 'one', targets: ['phone'] }, { id: 'one', targets: ['server'] }] }), /Duplicate version group/);
 });

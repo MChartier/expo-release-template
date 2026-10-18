@@ -66,8 +66,8 @@ export function validateConfig(config) {
     for (const id of component.after ?? []) {
       const predecessor = config.components.find(value => value.id === id);
       invariant(predecessor && id !== component.id, `Invalid predecessor ${id}.`);
-      invariant(component.kind === 'native' ? predecessor.kind === 'native'
-        : component.kind === 'ota' && ['ota', 'server'].includes(predecessor.kind), 'Unsupported publication predecessor kind.');
+      invariant(['native', 'ota'].includes(component.kind) && predecessor.kind === component.kind,
+        'Publication predecessors must sequence native targets or OTA channels of the same kind.');
     }
   }
   for (const group of config.nativeGroups ?? []) invariant(Array.isArray(group) && group.length > 1
