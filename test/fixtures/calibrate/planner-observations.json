@@ -1,0 +1,242 @@
+{
+  "7150900b81f244be41f0f225ad8bb25c78df668b": {
+    "manifest": {
+      "schema_version": 1,
+      "server": {
+        "version": "0.40.1",
+        "api": {
+          "current": "v1",
+          "supported": [
+            "v1"
+          ],
+          "legacy_alias": "/api"
+        }
+      },
+      "android": {
+        "application_id": "net.darkmachines.healthtracker",
+        "mobile": {
+          "version_name": "0.2.7",
+          "version_code": 11,
+          "native_release_tag": "native-v0.2.7",
+          "minimum_supported_version": "0.1.0"
+        },
+        "wear": {
+          "version_name": "0.2.7",
+          "version_code": 12,
+          "minimum_supported_version": "0.2.0"
+        },
+        "channels": {
+          "debug": {
+            "wear_build_type": "debug"
+          },
+          "internal": {
+            "mobile_eas_profile": "internal",
+            "wear_build_type": "internal"
+          },
+          "production": {
+            "mobile_eas_profile": "production",
+            "wear_build_type": "release"
+          }
+        }
+      }
+    },
+    "runtime": "1b1d60ca2d8f8e64ff909b7b70655fca621e4d9c",
+    "identities": {
+      "server": "610d0077677858dd3c2a025506611190323aabb2a5961e50767265f06c9bf53a",
+      "ota": "0db741b91decce1eca5fb7e1e99269ba3e86c7179e055d38d0e48fd7a8a0e379",
+      "wear": "d8973d78b9f07713e5eec750568c3d2d1ca9a6a667a27d2e0c6c3478562c7e96"
+    }
+  },
+  "bac172e90462bf8f417f6797e03f10d135b5892f": {
+    "manifest": {
+      "schema_version": 1,
+      "server": {
+        "version": "0.40.2",
+        "api": {
+          "current": "v1",
+          "supported": [
+            "v1"
+          ],
+          "legacy_alias": "/api"
+        }
+      },
+      "android": {
+        "application_id": "net.darkmachines.healthtracker",
+        "mobile": {
+          "version_name": "0.2.8",
+          "version_code": 15,
+          "native_release_tag": "native-v0.2.8",
+          "minimum_supported_version": "0.1.0"
+        },
+        "wear": {
+          "version_name": "0.2.8",
+          "version_code": 16,
+          "minimum_supported_version": "0.2.0"
+        },
+        "channels": {
+          "debug": {
+            "wear_build_type": "debug"
+          },
+          "internal": {
+            "mobile_eas_profile": "internal",
+            "wear_build_type": "internal"
+          },
+          "production": {
+            "mobile_eas_profile": "production",
+            "wear_build_type": "release"
+          }
+        }
+      }
+    },
+    "runtime": "8e57cfba7c42dd86aa56c918e6ec552e8354a4a6",
+    "identities": {
+      "server": "2586355b0b67dbc85809a64772528470848c191927f04c4108fa658cf6da8acb",
+      "ota": "7588ca191ba73c97823fb372e8bd55c16c336037a4963ff10c283cd86e6681bf",
+      "wear": "d8973d78b9f07713e5eec750568c3d2d1ca9a6a667a27d2e0c6c3478562c7e96"
+    }
+  },
+  "51da7b8962123a078deb0725a1fa356537318947": {
+    "manifest": {
+      "schema_version": 1,
+      "server": {
+        "version": "0.40.2",
+        "api": {
+          "current": "v1",
+          "supported": [
+            "v1"
+          ],
+          "legacy_alias": "/api"
+        }
+      },
+      "android": {
+        "application_id": "net.darkmachines.healthtracker",
+        "mobile": {
+          "version_name": "0.2.8",
+          "version_code": 15,
+          "native_release_tag": "native-v0.2.8",
+          "minimum_supported_version": "0.1.0"
+        },
+        "wear": {
+          "version_name": "0.2.8",
+          "version_code": 16,
+          "minimum_supported_version": "0.2.0"
+        },
+        "channels": {
+          "debug": {
+            "wear_build_type": "debug"
+          },
+          "internal": {
+            "mobile_eas_profile": "internal",
+            "wear_build_type": "internal"
+          },
+          "production": {
+            "mobile_eas_profile": "production",
+            "wear_build_type": "release"
+          }
+        }
+      }
+    },
+    "runtime": "8e57cfba7c42dd86aa56c918e6ec552e8354a4a6",
+    "identities": {
+      "server": "997ad02f572343766baf6560e3da7376bd61c56091729fff6d7958546b96dae4",
+      "ota": "f611fe0fcb34fbda676c364b5804115a6bf916638306e40bd4831d891da6a5b7",
+      "wear": "d8973d78b9f07713e5eec750568c3d2d1ca9a6a667a27d2e0c6c3478562c7e96"
+    }
+  },
+  "3dfb97c064c55cb55b514415618220f03dce91f1": {
+    "manifest": {
+      "schema_version": 1,
+      "server": {
+        "version": "0.40.3",
+        "api": {
+          "current": "v1",
+          "supported": [
+            "v1"
+          ],
+          "legacy_alias": "/api"
+        }
+      },
+      "android": {
+        "application_id": "net.darkmachines.healthtracker",
+        "mobile": {
+          "version_name": "0.2.9",
+          "version_code": 17,
+          "native_release_tag": "native-v0.2.9",
+          "minimum_supported_version": "0.1.0"
+        },
+        "wear": {
+          "version_name": "0.2.9",
+          "version_code": 18,
+          "minimum_supported_version": "0.2.0"
+        },
+        "channels": {
+          "debug": {
+            "wear_build_type": "debug"
+          },
+          "internal": {
+            "mobile_eas_profile": "internal",
+            "wear_build_type": "internal"
+          },
+          "production": {
+            "mobile_eas_profile": "production",
+            "wear_build_type": "release"
+          }
+        }
+      }
+    },
+    "runtime": "4d286064e68969352fc316a1c5ee6d8ac11583f2",
+    "identities": {
+      "server": "a38657d537678f54499170896324eb9bae8f2f39980cffc5ba4897bc836eeae1",
+      "ota": "c636ca791484c3e107005af9b0c982c3ce546ae854f23e3d47250cc2e0d15d1d",
+      "wear": "d8973d78b9f07713e5eec750568c3d2d1ca9a6a667a27d2e0c6c3478562c7e96"
+    }
+  },
+  "2e8def677fff5e4ff486565218ed5d9afcc4498b": {
+    "manifest": {
+      "schema_version": 1,
+      "server": {
+        "version": "0.40.3",
+        "api": {
+          "current": "v1",
+          "supported": [
+            "v1"
+          ],
+          "legacy_alias": "/api"
+        }
+      },
+      "android": {
+        "application_id": "net.darkmachines.healthtracker",
+        "mobile": {
+          "version_name": "0.2.9",
+          "version_code": 17,
+          "native_release_tag": "native-v0.2.9",
+          "minimum_supported_version": "0.1.0"
+        },
+        "wear": {
+          "version_name": "0.2.9",
+          "version_code": 18,
+          "minimum_supported_version": "0.2.0"
+        },
+        "channels": {
+          "debug": {
+            "wear_build_type": "debug"
+          },
+          "internal": {
+            "mobile_eas_profile": "internal",
+            "wear_build_type": "internal"
+          },
+          "production": {
+            "mobile_eas_profile": "production",
+            "wear_build_type": "release"
+          }
+        }
+      }
+    },
+    "runtime": "4d286064e68969352fc316a1c5ee6d8ac11583f2",
+    "identities": {
+      "server": "a38657d537678f54499170896324eb9bae8f2f39980cffc5ba4897bc836eeae1",
+      "ota": "c636ca791484c3e107005af9b0c982c3ce546ae854f23e3d47250cc2e0d15d1d",
+      "wear": "d8973d78b9f07713e5eec750568c3d2d1ca9a6a667a27d2e0c6c3478562c7e96"
+    }
+  }
+}

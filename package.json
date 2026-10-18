@@ -1,11 +1,26 @@
 {
-  "name": "expo-release-template",
-  "version": "1.0.0",
-  "private": true,
+  "name": "@mchartier/expo-release",
+  "version": "2.0.0",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": { "node": ">=22.14" },
+  "bin": { "expo-release": "bin/expo-release.mjs", "expo-release-credentials": "bin/expo-release-credentials.mjs" },
+  "exports": {
+    ".": { "types": "./src/index.d.mts", "default": "./src/index.mjs" },
+    "./engine": "./packages/release-engine/index.mjs",
+    "./expo": { "types": "./src/expo.d.cts", "default": "./src/expo.cjs" },
+    "./package.json": "./package.json",
+    "./schemas/*": "./schemas/*"
+  },
+  "files": ["bin", "src", "schemas", "packages/release-engine/*.mjs", "packages/release-engine/*.mts", "npm-shrinkwrap.json", "vendor/*.tgz", "vendor/*.json", "vendor/README.md"],
+  "dependencies": { "eas-cli": "file:vendor/eas-cli-22.4.0.tgz", "tar": "7.5.21", "typescript": "5.9.3" },
+  "bundleDependencies": ["eas-cli", "tar", "typescript"],
+  "overrides": { "dtrace-provider": "file:vendor/dtrace-provider-0.8.8.tgz" },
+  "devDependencies": { "yaml": "2.9.0" },
   "scripts": {
+    "prepare": "node bin/verify-distribution.mjs",
+    "package:eas": "node scripts/package-eas.mjs",
+    "verify:distribution": "node bin/verify-distribution.mjs",
     "test": "node --test",
-    "sync": "node scripts/sync-engine.mjs"
+    "check": "node --test"
   }
 }

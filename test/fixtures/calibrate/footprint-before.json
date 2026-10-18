@@ -1,0 +1,457 @@
+{
+  "schemaVersion": 1,
+  "repository": "MChartier/calibrate-health",
+  "baseline": "2e8def677fff5e4ff486565218ed5d9afcc4498b",
+  "adoptionHead": "19322f287af6bdc09e84d65d855d3aaa8afbc925",
+  "method": "Tracked physical lines, including comments and blank lines; relocated release files remain in scope. Root manifest release entries and generated dependency changes reported separately.",
+  "entries": [
+    {
+      "path": ".github/native-play-attestation-trusted-workflow-shas",
+      "category": "configuration",
+      "lines": 11
+    },
+    {
+      "path": ".github/native-release-tag-allowed-signers",
+      "category": "configuration",
+      "lines": 3
+    },
+    {
+      "path": ".github/release-image-attestation-trusted-workflow-shas",
+      "category": "configuration",
+      "lines": 8
+    },
+    {
+      "path": ".github/workflows/container-handler.yml",
+      "category": "workflow",
+      "lines": 121
+    },
+    {
+      "path": ".github/workflows/container-request.yml",
+      "category": "workflow",
+      "lines": 81
+    },
+    {
+      "path": ".github/workflows/container.yml",
+      "category": "workflow",
+      "lines": 937
+    },
+    {
+      "path": ".github/workflows/cut-release-handler.yml",
+      "category": "workflow",
+      "lines": 135
+    },
+    {
+      "path": ".github/workflows/cut-release-request.yml",
+      "category": "workflow",
+      "lines": 78
+    },
+    {
+      "path": ".github/workflows/cut-release.yml",
+      "category": "workflow",
+      "lines": 1271
+    },
+    {
+      "path": ".github/workflows/deploy-self-hosted.yml",
+      "category": "workflow",
+      "lines": 91
+    },
+    {
+      "path": ".github/workflows/expo-ota-update.yml",
+      "category": "workflow",
+      "lines": 1019
+    },
+    {
+      "path": ".github/workflows/native-build.yml",
+      "category": "workflow",
+      "lines": 236
+    },
+    {
+      "path": ".github/workflows/native-release.yml",
+      "category": "workflow",
+      "lines": 85
+    },
+    {
+      "path": ".github/workflows/native-submit.yml",
+      "category": "workflow",
+      "lines": 76
+    },
+    {
+      "path": ".github/workflows/publish-release-handler.yml",
+      "category": "workflow",
+      "lines": 152
+    },
+    {
+      "path": ".github/workflows/publish-release-request.yml",
+      "category": "workflow",
+      "lines": 113
+    },
+    {
+      "path": ".github/workflows/publish-release.yml",
+      "category": "workflow",
+      "lines": 339
+    },
+    {
+      "path": ".github/workflows/recover-release.yml",
+      "category": "workflow",
+      "lines": 126
+    },
+    {
+      "path": ".github/workflows/release-components.yml",
+      "category": "workflow",
+      "lines": 263
+    },
+    {
+      "path": "deploy/scripts/connect-and-deploy.mjs",
+      "category": "implementation",
+      "lines": 108
+    },
+    {
+      "path": "deploy/test/connect-and-deploy.test.mjs",
+      "category": "test",
+      "lines": 146
+    },
+    {
+      "path": "deploy/test/deployment-config.test.mjs",
+      "category": "test",
+      "lines": 119
+    },
+    {
+      "path": "docs/android-internal-testing.md",
+      "category": "documentation",
+      "lines": 97
+    },
+    {
+      "path": "docs/architecture/0002-canonical-release-manifest.md",
+      "category": "documentation",
+      "lines": 32
+    },
+    {
+      "path": "docs/architecture/0008-explicit-server-releases.md",
+      "category": "documentation",
+      "lines": 82
+    },
+    {
+      "path": "docs/architecture/0009-ota-server-release-compatibility.md",
+      "category": "documentation",
+      "lines": 49
+    },
+    {
+      "path": "docs/mobile-release.md",
+      "category": "documentation",
+      "lines": 280
+    },
+    {
+      "path": "docs/native-store-release.md",
+      "category": "documentation",
+      "lines": 79
+    },
+    {
+      "path": "docs/play-console-health-release-checklist.md",
+      "category": "documentation",
+      "lines": 372
+    },
+    {
+      "path": "docs/release-acceptance.md",
+      "category": "documentation",
+      "lines": 87
+    },
+    {
+      "path": "docs/release-compatibility.md",
+      "category": "documentation",
+      "lines": 268
+    },
+    {
+      "path": "docs/release-scope.md",
+      "category": "documentation",
+      "lines": 48
+    },
+    {
+      "path": "docs/releases/0.12.0-native-0.1.0-wear-0.2.0.md",
+      "category": "documentation",
+      "lines": 62
+    },
+    {
+      "path": "docs/releases/0.33.5-native-0.2.5-wear-0.2.5.md",
+      "category": "documentation",
+      "lines": 59
+    },
+    {
+      "path": "docs/releases/0.33.5-native-0.2.6-wear-0.2.6.md",
+      "category": "documentation",
+      "lines": 31
+    },
+    {
+      "path": "docs/releases/0.35.0-native-0.2.6-wear-0.2.6.md",
+      "category": "documentation",
+      "lines": 38
+    },
+    {
+      "path": "docs/security-release-threat-model.md",
+      "category": "documentation",
+      "lines": 56
+    },
+    {
+      "path": "scripts/expo-ota-artifact.mjs",
+      "category": "implementation",
+      "lines": 584
+    },
+    {
+      "path": "scripts/expo-ota-artifact.test.mjs",
+      "category": "test",
+      "lines": 315
+    },
+    {
+      "path": "scripts/expo-ota-publish.mjs",
+      "category": "implementation",
+      "lines": 56
+    },
+    {
+      "path": "scripts/expo-ota-store.mjs",
+      "category": "implementation",
+      "lines": 133
+    },
+    {
+      "path": "scripts/expo-runtime.mjs",
+      "category": "implementation",
+      "lines": 61
+    },
+    {
+      "path": "scripts/expo-runtime.test.mjs",
+      "category": "test",
+      "lines": 57
+    },
+    {
+      "path": "scripts/native-config.mjs",
+      "category": "implementation",
+      "lines": 217
+    },
+    {
+      "path": "scripts/native-config.test.mjs",
+      "category": "test",
+      "lines": 372
+    },
+    {
+      "path": "scripts/native-eas-credentials.mjs",
+      "category": "implementation",
+      "lines": 115
+    },
+    {
+      "path": "scripts/native-eas-promote.mjs",
+      "category": "implementation",
+      "lines": 91
+    },
+    {
+      "path": "scripts/native-eas-submit.mjs",
+      "category": "implementation",
+      "lines": 131
+    },
+    {
+      "path": "scripts/native-internal-release.mjs",
+      "category": "implementation",
+      "lines": 368
+    },
+    {
+      "path": "scripts/native-internal-release.test.mjs",
+      "category": "test",
+      "lines": 223
+    },
+    {
+      "path": "scripts/native-ota-contract.mjs",
+      "category": "implementation",
+      "lines": 259
+    },
+    {
+      "path": "scripts/native-ota-contract.test.mjs",
+      "category": "test",
+      "lines": 320
+    },
+    {
+      "path": "scripts/native-ota-update.mjs",
+      "category": "implementation",
+      "lines": 337
+    },
+    {
+      "path": "scripts/native-ota-update.test.mjs",
+      "category": "test",
+      "lines": 244
+    },
+    {
+      "path": "scripts/native-play-receipt.mjs",
+      "category": "implementation",
+      "lines": 563
+    },
+    {
+      "path": "scripts/native-play-receipt.test.mjs",
+      "category": "test",
+      "lines": 279
+    },
+    {
+      "path": "scripts/native-play-release.mjs",
+      "category": "implementation",
+      "lines": 1155
+    },
+    {
+      "path": "scripts/native-play-release.test.mjs",
+      "category": "test",
+      "lines": 1316
+    },
+    {
+      "path": "scripts/native-release-artifacts.mjs",
+      "category": "implementation",
+      "lines": 136
+    },
+    {
+      "path": "scripts/native-release-build.mjs",
+      "category": "implementation",
+      "lines": 822
+    },
+    {
+      "path": "scripts/native-release-build.test.mjs",
+      "category": "test",
+      "lines": 826
+    },
+    {
+      "path": "scripts/native-release-devices.mjs",
+      "category": "implementation",
+      "lines": 1030
+    },
+    {
+      "path": "scripts/native-release-devices.test.mjs",
+      "category": "test",
+      "lines": 551
+    },
+    {
+      "path": "scripts/native-release-evidence.mjs",
+      "category": "implementation",
+      "lines": 743
+    },
+    {
+      "path": "scripts/native-release-evidence.test.mjs",
+      "category": "test",
+      "lines": 324
+    },
+    {
+      "path": "scripts/native-tag-attestation.mjs",
+      "category": "implementation",
+      "lines": 484
+    },
+    {
+      "path": "scripts/native-tag-attestation.test.mjs",
+      "category": "test",
+      "lines": 496
+    },
+    {
+      "path": "scripts/release-acceptance.mjs",
+      "category": "implementation",
+      "lines": 324
+    },
+    {
+      "path": "scripts/release-acceptance.test.mjs",
+      "category": "test",
+      "lines": 130
+    },
+    {
+      "path": "scripts/release-artifact-store.test.mjs",
+      "category": "test",
+      "lines": 153
+    },
+    {
+      "path": "scripts/release-ci-gate.mjs",
+      "category": "implementation",
+      "lines": 261
+    },
+    {
+      "path": "scripts/release-ci-gate.test.mjs",
+      "category": "test",
+      "lines": 274
+    },
+    {
+      "path": "scripts/release-config.mjs",
+      "category": "implementation",
+      "lines": 1779
+    },
+    {
+      "path": "scripts/release-config.test.mjs",
+      "category": "test",
+      "lines": 1755
+    },
+    {
+      "path": "scripts/release-handler-event.mjs",
+      "category": "implementation",
+      "lines": 118
+    },
+    {
+      "path": "scripts/release-handler-event.test.mjs",
+      "category": "test",
+      "lines": 111
+    },
+    {
+      "path": "scripts/release-orchestrator.mjs",
+      "category": "implementation",
+      "lines": 211
+    },
+    {
+      "path": "scripts/release-orchestrator.test.mjs",
+      "category": "test",
+      "lines": 189
+    },
+    {
+      "path": "scripts/release-reconcile.mjs",
+      "category": "implementation",
+      "lines": 74
+    },
+    {
+      "path": "scripts/release-reconcile.test.mjs",
+      "category": "test",
+      "lines": 105
+    },
+    {
+      "path": "scripts/release-record.mjs",
+      "category": "implementation",
+      "lines": 188
+    },
+    {
+      "path": "scripts/release-request.mjs",
+      "category": "implementation",
+      "lines": 181
+    },
+    {
+      "path": "scripts/release-request.test.mjs",
+      "category": "test",
+      "lines": 128
+    },
+    {
+      "path": "scripts/release-selection.mjs",
+      "category": "implementation",
+      "lines": 148
+    },
+    {
+      "path": "scripts/release-workflow-contract.test.mjs",
+      "category": "test",
+      "lines": 1898
+    },
+    {
+      "path": "scripts/zip-entry.mjs",
+      "category": "implementation",
+      "lines": 36
+    },
+    {
+      "path": "tools/eas-cli/package-lock.json",
+      "category": "generated",
+      "lines": 6534
+    },
+    {
+      "path": "tools/eas-cli/package.json",
+      "category": "configuration",
+      "lines": 13
+    }
+  ],
+  "totals": {
+    "configuration": 35,
+    "workflow": 5123,
+    "implementation": 10713,
+    "test": 10331,
+    "documentation": 1640,
+    "generated": 6534
+  }
+}

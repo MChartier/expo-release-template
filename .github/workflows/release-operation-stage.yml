@@ -1,0 +1,166 @@
+# Protected retained operations restore original inputs; these workers never check out application source.
+name: Execute retained operation stage
+on:
+  workflow_call:
+    inputs:
+      release-id: { type: string, required: true }
+      stage: { type: string, required: true }
+      provider: { type: string, required: true }
+      approval: { type: string, required: true }
+      access-token-secret: { type: string, default: '' }
+      service-account-secret: { type: string, default: '' }
+      retry-stage: { type: string, default: '' }
+      state-attempt: { type: string, default: '' }
+      mode: { type: string, default: 'run' }
+    secrets:
+      EXPO_TOKEN: { required: false }
+      GOOGLE_PLAY_ACCESS_TOKEN: { required: false }
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64: { required: false }
+      GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN: { required: false }
+      GOOGLE_PLAY_TEST_ACCESS_TOKEN: { required: false }
+      GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64: { required: false }
+      GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64: { required: false }
+      GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN: { required: false }
+      GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64: { required: false }
+      DEPLOY_WG_ENDPOINT: { required: false }
+      DEPLOY_WG_PRIVATE_KEY: { required: false }
+      DEPLOY_TOKEN: { required: false }
+permissions: { contents: read }
+jobs:
+  expo:
+    if: inputs.provider == 'expo' && inputs.approval == ''
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read, attestations: read }
+    steps: &expo_steps
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - run: npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - if: inputs.mode == 'reconcile'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ inputs.state-attempt }}', path: .release-state }
+      - run: node .toolkit/bin/worker.mjs operation-stage
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RELEASE_ID: ${{ inputs.release-id }}
+          RELEASE_STAGE: ${{ inputs.stage }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          RELEASE_PROVIDER: expo
+          RELEASE_APPROVAL: ${{ inputs.approval }}
+          RELEASE_RETRY_STAGE: ${{ inputs.retry-stage }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+  approved-expo:
+    if: inputs.provider == 'expo' && inputs.approval != ''
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.approval }}
+    permissions: { contents: write, actions: read, attestations: read }
+    steps: *expo_steps
+  play:
+    if: inputs.provider == 'play' && inputs.approval == ''
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read, attestations: read }
+    steps: &play_steps
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - run: npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - if: inputs.mode == 'reconcile'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ inputs.state-attempt }}', path: .release-state }
+      - run: node .toolkit/bin/worker.mjs operation-stage
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RELEASE_ID: ${{ inputs.release-id }}
+          RELEASE_STAGE: ${{ inputs.stage }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          RELEASE_PROVIDER: play
+          RELEASE_APPROVAL: ${{ inputs.approval }}
+          RELEASE_RETRY_STAGE: ${{ inputs.retry-stage }}
+          RELEASE_ACCESS_TOKEN: ${{ secrets[inputs.access-token-secret] }}
+          RELEASE_SERVICE_ACCOUNT: ${{ secrets[inputs.service-account-secret] }}
+  approved-play:
+    if: inputs.provider == 'play' && inputs.approval != ''
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.approval }}
+    permissions: { contents: write, actions: read, attestations: read }
+    steps: *play_steps
+  image:
+    if: inputs.provider == 'image' && inputs.approval == ''
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read, attestations: read, packages: write }
+    steps: &image_steps
+      - run: sudo apt-get update -qq && sudo apt-get install --no-install-recommends -y skopeo
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - run: npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - if: inputs.mode == 'reconcile'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ inputs.state-attempt }}', path: .release-state }
+      - run: node .toolkit/bin/worker.mjs operation-stage
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RELEASE_ID: ${{ inputs.release-id }}
+          RELEASE_STAGE: ${{ inputs.stage }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          RELEASE_PROVIDER: image
+          RELEASE_APPROVAL: ${{ inputs.approval }}
+          RELEASE_RETRY_STAGE: ${{ inputs.retry-stage }}
+          GHCR_TOKEN: ${{ github.token }}
+  approved-image:
+    if: inputs.provider == 'image' && inputs.approval != ''
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.approval }}
+    permissions: { contents: write, actions: read, attestations: read, packages: write }
+    steps: *image_steps
+  deploy:
+    if: inputs.provider == 'deploy' && inputs.approval == ''
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read, attestations: read }
+    steps: &deploy_steps
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - run: npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - run: sudo apt-get update && sudo apt-get install --no-install-recommends -y wireguard-tools
+      - if: inputs.mode == 'reconcile'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ inputs.state-attempt }}', path: .release-state }
+      - run: node .toolkit/bin/worker.mjs operation-stage
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RELEASE_ID: ${{ inputs.release-id }}
+          RELEASE_STAGE: ${{ inputs.stage }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          RELEASE_PROVIDER: deploy
+          RELEASE_APPROVAL: ${{ inputs.approval }}
+          RELEASE_RETRY_STAGE: ${{ inputs.retry-stage }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+          DEPLOY_WG_ADDRESS: ${{ vars.DEPLOY_WG_ADDRESS }}
+          DEPLOY_WG_PUBLIC_KEY: ${{ vars.DEPLOY_WG_PUBLIC_KEY }}
+          DEPLOY_WG_ENDPOINT: ${{ secrets.DEPLOY_WG_ENDPOINT }}
+          DEPLOY_WG_PRIVATE_KEY: ${{ secrets.DEPLOY_WG_PRIVATE_KEY }}
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+  approved-deploy:
+    if: inputs.provider == 'deploy' && inputs.approval != ''
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.approval }}
+    permissions: { contents: write, actions: read, attestations: read }
+    steps: *deploy_steps

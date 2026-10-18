@@ -86,6 +86,11 @@ export function reduceOperation(previous, event) {
       next.reason = reason(event.reason);
       break;
     }
+    case 'observed': {
+      invariant(state.status === 'accepted' && state.operationId, 'Only a known accepted request may retain a pending observation.');
+      next.proof = evidence(event.proof, 'Provider observation');
+      break;
+    }
     case 'complete': {
       invariant(['intent', 'accepted', 'unknown'].includes(state.status), 'Only an outstanding operation can complete.');
       if (state.status === 'unknown' || event.proof !== undefined) next.proof = evidence(event.proof, 'Reconciliation proof');

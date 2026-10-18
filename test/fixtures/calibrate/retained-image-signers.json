@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "policySource": "efb7c77615ed5144deb13fe939bf84190e1638cc",
+  "retained": [
+    {
+      "tag": "v0.36.0",
+      "commit": "4a341f1cbcff5d99c64803507933cc2ddb9b5f57",
+      "signer": "9aad13afd54e2d1b0931a444dbdb200b92179ccc",
+      "policy": "canonical-cut-parent"
+    },
+    {
+      "tag": "v0.37.0",
+      "commit": "8e02f2d4cbb191571820fa08f9c0a1f5a9e18a9a",
+      "signer": "7a0f158796f8d15fbc71fd6cb399fed76362d56c",
+      "policy": "canonical-cut-parent"
+    },
+    {
+      "tag": "v0.38.0",
+      "commit": "5ac6be5aa46fbbce274620ea44c2e310ab169032",
+      "signer": "2d7a4f659d8d1a8d27cfb4210db1bbe22b3e536b",
+      "policy": "canonical-cut-parent"
+    },
+    {
+      "tag": "v0.39.0",
+      "commit": "4ae85df28859e4a423318bc94555603423972cce",
+      "signer": "97767a1204b51a901aca47c0f38856b71438dbda",
+      "policy": "canonical-cut-parent"
+    },
+    {
+      "tag": "v0.39.1",
+      "commit": "3abc55d893f71a8e2ef509427f1d22b358397175",
+      "signer": "a094f424ff9ee5984b2a783c1b1af981302f06c0",
+      "policy": "canonical-cut-parent"
+    },
+    {
+      "tag": "v0.40.0",
+      "commit": "adb55f37c9ef0ad27c43a6a4a5e25bbbaccbc11f",
+      "signer": "a43c06dfb567128f31a76c2878b420c2ab53269f",
+      "policy": "canonical-cut-parent"
+    },
+    {
+      "tag": "v0.40.1",
+      "commit": "8a162c8286045bcea50cab3d83a7e1927df24e85",
+      "signer": "e582bde4451c3660e5662ddadff0539a16283712",
+      "policy": "canonical-cut-parent"
+    },
+    {
+      "tag": "v0.40.2",
+      "commit": "bac172e90462bf8f417f6797e03f10d135b5892f",
+      "signer": "6f119645a559105355d33fd2c0b8cc7c3e22cf66",
+      "policy": "unchanged-critical-tooling"
+    },
+    {
+      "tag": "v0.40.3",
+      "commit": "3dfb97c064c55cb55b514415618220f03dce91f1",
+      "signer": "4b8947309e5d2dcb66e1f2dec8abf13f632198a9",
+      "policy": "unchanged-critical-tooling"
+    }
+  ]
+}

@@ -19,8 +19,9 @@ export function immutable<T>(value: T): DeepReadonly<T>;
 export interface SourceIdentity {
   repository: string;
   commit: string;
-  workflowCommit: string;
+  workflowCommit?: string;
   toolkitCommit: string;
+  origin?: 'local';
 }
 export type EnginePlan<T extends { source: SourceIdentity } = { source: SourceIdentity }> = DeepReadonly<T & { schemaVersion: 1; kind: 'expo-release-plan'; digest: string }>;
 /** Validate full application, trusted-workflow, and toolkit SHAs without requiring them to be equal. */
@@ -98,6 +99,7 @@ export interface OperationState {
 export type OperationEvent =
   | { type: 'intent'; operationKey: string; request?: JsonValue }
   | { type: 'accepted'; operationId: string; proof?: OperationEvidence }
+  | { type: 'observed'; proof: OperationEvidence }
   | { type: 'unknown'; reason: string }
   | { type: 'complete'; receipt: OperationEvidence; proof?: OperationEvidence }
   /** Definitive failure of an unknown/known-ID operation, or refreshing an existing failure, requires fresh proof. */

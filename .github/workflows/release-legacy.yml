@@ -1,0 +1,158 @@
+# Historical recovery executes only authenticated retained evidence in a provider-scoped worker.
+name: Recover original release evidence
+on:
+  workflow_call:
+    inputs:
+      state-attempt: { type: string, required: true }
+      provider: { type: string, required: true }
+      approval: { type: string, required: true }
+    secrets:
+      EXPO_TOKEN: { required: false }
+      DEPLOY_WG_ENDPOINT: { required: false }
+      DEPLOY_WG_PRIVATE_KEY: { required: false }
+      DEPLOY_TOKEN: { required: false }
+permissions: { contents: read }
+jobs:
+  expo:
+    if: inputs.provider == 'expo' && inputs.approval == ''
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read, attestations: read }
+    steps: &expo_steps
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - run: npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ inputs.state-attempt }}', path: .release-state }
+      - run: node .toolkit/bin/worker.mjs legacy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RECOVERY_PROVIDER: expo
+          RECOVERY_APPROVAL: ${{ inputs.approval }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+  approved-expo:
+    if: inputs.provider == 'expo' && inputs.approval != ''
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.approval }}
+    permissions: { contents: write, actions: read, attestations: read }
+    steps: *expo_steps
+  image:
+    if: inputs.provider == 'image' && inputs.approval == ''
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read, attestations: read, packages: write }
+    steps: &image_steps
+      - run: sudo apt-get update -qq && sudo apt-get install --no-install-recommends -y skopeo
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - run: npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ inputs.state-attempt }}', path: .release-state }
+      - run: node .toolkit/bin/worker.mjs legacy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RECOVERY_PROVIDER: image
+          RECOVERY_APPROVAL: ${{ inputs.approval }}
+          GHCR_TOKEN: ${{ github.token }}
+  approved-image:
+    if: inputs.provider == 'image' && inputs.approval != ''
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.approval }}
+    permissions: { contents: write, actions: read, attestations: read, packages: write }
+    steps: *image_steps
+  deploy:
+    if: inputs.provider == 'deploy' && inputs.approval == ''
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read }
+    steps: &deploy_steps
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - run: npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ inputs.state-attempt }}', path: .release-state }
+      - run: sudo apt-get update && sudo apt-get install --no-install-recommends -y wireguard-tools
+      - run: node .toolkit/bin/worker.mjs legacy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RECOVERY_PROVIDER: deploy
+          RECOVERY_APPROVAL: ${{ inputs.approval }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+          DEPLOY_WG_ADDRESS: ${{ vars.DEPLOY_WG_ADDRESS }}
+          DEPLOY_WG_PUBLIC_KEY: ${{ vars.DEPLOY_WG_PUBLIC_KEY }}
+          DEPLOY_WG_ENDPOINT: ${{ secrets.DEPLOY_WG_ENDPOINT }}
+          DEPLOY_WG_PRIVATE_KEY: ${{ secrets.DEPLOY_WG_PRIVATE_KEY }}
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+  approved-deploy:
+    if: inputs.provider == 'deploy' && inputs.approval != ''
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.approval }}
+    permissions: { contents: write, actions: read }
+    steps: *deploy_steps
+  repository:
+    if: inputs.provider == 'repository' && inputs.approval == ''
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read }
+    steps: &repository_steps
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - run: npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ inputs.state-attempt }}', path: .release-state }
+      - run: node .toolkit/bin/worker.mjs legacy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RECOVERY_PROVIDER: repository
+          RECOVERY_APPROVAL: ${{ inputs.approval }}
+  approved-repository:
+    if: inputs.provider == 'repository' && inputs.approval != ''
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.approval }}
+    permissions: { contents: write, actions: read }
+    steps: *repository_steps
+  audit:
+    if: inputs.provider == 'audit' && inputs.approval == ''
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read, attestations: read, packages: read }
+    steps: &audit_steps
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - run: npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ inputs.state-attempt }}', path: .release-state }
+      - run: node .toolkit/bin/worker.mjs legacy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RECOVERY_PROVIDER: audit
+          RECOVERY_APPROVAL: ${{ inputs.approval }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          GHCR_TOKEN: ${{ github.token }}
+  approved-audit:
+    if: inputs.provider == 'audit' && inputs.approval != ''
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.approval }}
+    permissions: { contents: write, actions: read, attestations: read, packages: read }
+    steps: *audit_steps

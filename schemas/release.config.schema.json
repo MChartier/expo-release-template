@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/MChartier/expo-release-template/main/schemas/release.config.schema.json",
+  "title": "Shared Expo release application configuration",
+  "description": "Declarative application boundary. The package validator additionally checks component references, supported ordering and version lane consistency.",
+  "type": "object",
+  "required": ["schemaVersion", "repository", "defaultBranch", "components"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "repository": { "type": "string", "pattern": "^[\\w.-]+/[\\w.-]+$" },
+    "defaultBranch": { "type": "string", "minLength": 1 },
+    "defaultProfile": { "type": "string" },
+    "packageDirectories": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "profiles": { "type": "object", "additionalProperties": { "type": "object" } },
+    "components": { "type": "array", "minItems": 1, "description": "At most one server component is supported by the fixed deployment target; the runtime validator checks this constraint.", "items": { "$ref": "#/definitions/component" } },
+    "expo": { "type": "object", "description": "Project/owner/server values may use inert JSON file/pointer mappings; no executable configuration is loaded by privileged jobs." },
+    "hooks": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "inspect": { "$ref": "#/definitions/hook" }, "prepare": { "$ref": "#/definitions/hook" }, "validate": { "$ref": "#/definitions/hook" }, "build": { "$ref": "#/definitions/hook" }, "verify": { "$ref": "#/definitions/hook" } }
+    },
+    "versionGroups": { "type": "array", "items": { "type": "object", "required": ["id", "targets"], "properties": {
+      "id": { "type": "string" }, "targets": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+      "version": { "$ref": "#/definitions/mapping" }, "codeAllocation": { "enum": ["global", "independent"] }, "bump": { "enum": ["patch", "requested"] }
+    } } },
+    "policy": { "type": "object" },
+    "local": { "type": "object", "properties": {
+      "settingsDirectory": { "type": "string" }, "settingsFile": { "type": "string" },
+      "legacyCredentialsField": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$", "description": "Original settings key containing an absolute external Android credential path." },
+      "legacyMetadataFields": { "type": "object", "additionalProperties": { "enum": ["path", "string-map"] }, "description": "Declared legacy metadata is validated and ignored, never adopted as publication evidence." },
+      "legacyBuildReceiptsField": { "type": "string", "description": "Original platform:profile local receipt path map, read only to reject appVersion runtime collisions." },
+      "submissions": { "type": "object", "description": "Explicit local Android internal-track permission. Local evidence never becomes hosted provenance.",
+        "additionalProperties": { "type": "object", "required": ["track"], "properties": {
+          "track": { "type": "string", "pattern": "^(?:[a-z0-9._-]+:)?internal$" }
+        } }
+      }
+    } },
+    "promotions": { "type": "object", "additionalProperties": { "type": "object", "required": ["targets", "tracks", "approvalEnvironment", "credentials"], "properties": {
+      "targets": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+      "tracks": { "type": "object", "additionalProperties": { "type": "object", "required": ["source", "destination"], "properties": {
+        "source": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._:-]{0,99}$" }, "destination": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._:-]{0,99}$" },
+        "sourceMarkerPrefix": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,60}$" }
+      } } },
+      "approvalEnvironment": { "type": "string", "minLength": 1 },
+      "credentials": { "type": "object", "minProperties": 1, "additionalProperties": false, "properties": {
+        "accessToken": { "type": "string", "pattern": "^GOOGLE_PLAY_[A-Z0-9_]{1,70}$" }, "serviceAccountBase64": { "type": "string", "pattern": "^GOOGLE_PLAY_[A-Z0-9_]{1,70}$" }
+      } }
+    } } },
+    "github": { "type": "object", "properties": { "requestWorkflow": { "type": "string" }, "handlerWorkflow": { "type": "string" }, "recoveryWorkflow": { "type": "string" } } },
+    "deployment": { "type": "object", "required": ["type"], "properties": { "type": { "const": "wireguard-webhook" } } }
+  },
+  "definitions": {
+    "mapping": { "type": "object", "required": ["file", "pointer"], "properties": { "file": { "type": "string", "minLength": 1 }, "pointer": { "type": "string", "pattern": "^/" }, "optional": { "type": "boolean" }, "codePointer": { "type": "string", "pattern": "^/" }, "codeType": { "const": "string" }, "mirrors": { "type": "array", "items": { "$ref": "#/definitions/mapping" } } } },
+    "hook": { "type": "object", "required": ["command"], "properties": { "command": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }, "timeoutMs": { "type": "integer", "minimum": 1 } }, "additionalProperties": false },
+    "component": {
+      "type": "object", "required": ["id", "kind"],
+      "properties": {
+        "id": { "type": "string", "maxLength": 80, "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$" }, "kind": { "enum": ["server", "native", "ota"] },
+        "platform": { "enum": ["android", "ios"] }, "builder": { "enum": ["command", "eas"] }, "localBuilder": { "enum": ["command", "eas"], "description": "Explicit local-only override. EAS local builds support iOS on macOS; hosted builder policy is unchanged." },
+        "appDirectory": { "type": "string", "minLength": 1 }, "applicationId": { "type": "string", "minLength": 1 }, "nativeTarget": { "type": "string" },
+        "version": { "$ref": "#/definitions/mapping" }, "runtimePolicy": { "enum": ["appVersion", "fingerprint"] },
+        "publication": { "type": "object", "required": ["gitTagPrefix", "movingTag"], "properties": { "gitTagPrefix": { "type": "string" }, "movingTag": { "type": "string" } }, "additionalProperties": false },
+        "smoke": { "type": "object", "required": ["port", "healthPath"], "properties": {
+          "port": { "type": "integer", "minimum": 1, "maximum": 65535 }, "healthPath": { "type": "string", "pattern": "^/[A-Za-z0-9/_.-]*$" }, "timeoutSeconds": { "type": "integer", "minimum": 1 },
+          "environment": { "type": "object", "additionalProperties": { "type": "string" } },
+          "services": { "type": "object", "additionalProperties": { "type": "object", "required": ["image"], "properties": { "image": { "type": "string", "minLength": 1 }, "environment": { "type": "object", "additionalProperties": { "type": "string" } } } } }
+        }, "additionalProperties": false },
+        "environmentSource": { "enum": ["declared", "provider"] },
+        "runtimeCompatibility": { "enum": ["exact", "fingerprint"], "description": "Fingerprint compatibility requires a fingerprint native runtime whose exact full hash equals the OTA runtime." },
+        "runtimeBinding": { "enum": ["native", "source"], "description": "Source binding explicitly records source validation without asserting an installed native runtime match." },
+        "approvalEnvironment": { "oneOf": [{ "type": "string" }, { "type": "object", "additionalProperties": { "type": "string" } }], "description": "A fixed protected environment or a profile-to-environment map; an empty value uses the unapproved boundary." }, "signingEnvironment": { "type": "string" },
+        "after": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }, "profiles": { "type": "array", "items": { "type": "string" } }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "native" } } }, "then": { "required": ["platform", "builder"] } },
+        { "if": { "properties": { "kind": { "const": "ota" } } }, "then": { "required": ["platform", "nativeTarget"] } }
+      ]
+    }
+  }
+}
