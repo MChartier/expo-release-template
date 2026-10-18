@@ -7,7 +7,7 @@ import { verifyHistoricalArtifact } from '../artifacts.mjs';
 import { verifyHistoricalAttestation } from '../attestation.mjs';
 import { repositoryJson } from '../trusted.mjs';
 import { createEasPublisherWorkspace } from '../providers/eas-workspace.mjs';
-import { createEasSubmissionProvider, verifyEasSubmission } from '../providers/eas.mjs';
+import { createCorrectableEasSubmissionProvider, verifyEasDestinationCorrection } from '../providers/eas-correction.mjs';
 import { sourceEnvironment } from '../hooks.mjs';
 import { executeOperation, latestOperation } from '../operations.mjs';
 import { appendCalibrateRecovery } from './calibrate.mjs';
@@ -81,15 +81,8 @@ export function routeCalibrateRecovery(state, request, config) {
 
 /** Observe a rejected original destination before allowing its specifically audited correction. */
 export async function verifyCalibrateCorrection({ value, operation, spec, transport }) {
-  invariant(value?.confirmed === true && value.reason?.trim().length >= 20 && value.reason.length <= 2000
-    && value.operationId === operation.operationId && value.artifactSha256 === spec.artifact.sha256
-    && value.from === (spec.target === 'phone' ? 'qa' : 'wear:qa') && value.to === spec.destination.track,
-    'Correction must identify the original rejected destination, provider ID, retained bytes and explicit no-publication evidence.');
-  const raw = await transport.getSubmission(operation.operationId);
-  verifyEasSubmission(raw, { ...spec, destination: { ...spec.destination, track: value.from } });
-  invariant(raw.status === 'ERRORED' && !raw.submittedBuild && raw.archiveUrl
-    && await transport.hashArtifact(raw.archiveUrl) === spec.artifact.sha256, 'Original rejection does not prove these exact retained bytes.');
-  return { ...value, kind: 'destination-correction', providerStatus: raw.status };
+  invariant(value?.from === (spec.target === 'phone' ? 'qa' : 'wear:qa'), 'Correction must retain the original historical destination.');
+  return verifyEasDestinationCorrection({ value, operation, spec, transport });
 }
 
 /** Continue one original stage using the common executor; all new evidence has a separate producing workflow. */
@@ -139,17 +132,7 @@ export async function continueCalibrateRelease({ ledger, releaseId, request, env
       await append({ stage, status: operation.status, operation, transition });
       return { reconciled: true, stage, nextAction: 'retry', providerId: previous.operationId };
     }
-    const base = createEasSubmissionProvider(spec, remote);
-    const correction = previous?.proof?.kind === 'destination-correction' ? previous.proof : null;
-    const provider = correction ? { ...base,
-      async status(id) { if (id !== correction.operationId) return base.status(id); return { id, status: 'failed', correction: true }; },
-      async verify(value, context) { return value.correction ? verifyCalibrateCorrection({ value: correction, operation: previous, spec, transport: remote }) : base.verify(value, context); },
-      async prepareRetry() { return { mode: 'new-request', proof: await verifyCalibrateCorrection({ value: correction, operation: previous, spec, transport: remote }) }; },
-      async start(context) {
-        invariant(context.retry?.mode === 'new-request', 'A corrected upload requires its exact explicit retry.');
-        await verifyCalibrateCorrection({ value: correction, operation: previous, spec, transport: remote });
-        return base.start({ ...context, retry: undefined });
-      } } : base;
+    const provider = createCorrectableEasSubmissionProvider({ spec, transport: remote, operation: previous });
     if (request.action === 'reconcile') {
       invariant(previous && previous.status !== 'complete' && request.reconciliation?.operationId
         && (!previous.operationId || previous.operationId === request.reconciliation.operationId), 'Reconciliation cannot replace an original provider ID.');

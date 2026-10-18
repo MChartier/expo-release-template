@@ -1,7 +1,7 @@
 /** @file Exact-source validation and merge recovery never replace a moved candidate or infer success from a loose merge SHA. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { finalizeCandidate, abandonCandidate } from '../src/candidate.mjs';
+import { finalizeCandidate, abandonCandidate, verifyCandidateChecks } from '../src/candidate.mjs';
 
 function fixture() {
   const source = 'a'.repeat(40); const head = 'b'.repeat(40); const merged = 'c'.repeat(40); const tree = 'd'.repeat(40); const toolkit = 'e'.repeat(40);
@@ -23,8 +23,8 @@ function fixture() {
     if (route === '/actions/runs/123') return { id: 123, run_attempt: 1, repository: { full_name: 'fixture/app' }, head_sha: source,
       head_branch: 'main', event: 'workflow_run', path: '.github/workflows/release-handler.yml', status: didMerge ? 'completed' : 'in_progress',
       referenced_workflows: [{ path: 'MChartier/expo-release-template/.github/workflows/release-handler.yml@' + toolkit, sha: toolkit }] };
-    if (route === '/actions/runs/123/jobs?filter=latest&per_page=100') return { total_count: 2,
-      jobs: ['source', 'candidate'].map(role => ({ name: `Release validation (${role})`, status: 'completed', conclusion: 'success', run_attempt: 1 })) };
+    if (route === '/actions/runs/123/jobs?filter=latest&per_page=100&page=1') return { total_count: 2,
+      jobs: ['source', 'candidate'].map((role, index) => ({ id: index + 1, name: `Release validation (${role})`, status: 'completed', conclusion: 'success', run_attempt: 1 })) };
     if (route === '/pulls/7/merge') {
       assert.equal(options.method, 'PUT'); assert.equal(options.body.sha, head); didMerge = true;
       if (loseResponse) throw new Error('lost merge response');
@@ -42,6 +42,20 @@ test('lost protected merge response resumes its original checked tree without me
   assert.equal(f.events[0].type, 'merge-intent');
   assert.equal(await finalizeCandidate({ ...f.input, origin: { kind: 'github', runId: '999', runAttempt: 1 } }), f.merged);
   assert.equal(f.calls.filter(value => value.method === 'PUT').length, 1);
+});
+
+test('original validation survives a completed release with more than one page of nested jobs', async () => {
+  const f = fixture(); f.alreadyMerged();
+  const jobs = Array.from({ length: 130 }, (_, index) => ({ id: index + 1, name: `worker ${index}`, status: 'completed', conclusion: 'success', run_attempt: 1 }));
+  jobs[104].name = 'Release / Release validation (source)';
+  jobs[129].name = 'Release / Release validation (candidate)';
+  const api = async route => route.includes('/jobs?') ? { total_count: jobs.length,
+    jobs: jobs.slice((Number(new URLSearchParams(route.split('?')[1]).get('page')) - 1) * 100, Number(new URLSearchParams(route.split('?')[1]).get('page')) * 100) } : f.input.api(route);
+  assert.deepEqual(await verifyCandidateChecks({ ...f.input, api, allowCompleted: true }), { candidateAttempt: 1 });
+  jobs[129].conclusion = 'failure';
+  await assert.rejects(verifyCandidateChecks({ ...f.input, api, allowCompleted: true }), /candidate.*did not succeed/);
+  jobs[129].conclusion = 'success'; jobs[129].id = jobs[0].id;
+  await assert.rejects(verifyCandidateChecks({ ...f.input, api, allowCompleted: true }), /Repeated/);
 });
 
 test('a merged or moved PR cannot be adopted without original merge intent and exact ancestry', async () => {

@@ -25,7 +25,9 @@
     "policy": { "type": "object" },
     "local": { "type": "object", "properties": {
       "settingsDirectory": { "type": "string" }, "settingsFile": { "type": "string" },
-      "legacyCredentialsField": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$", "description": "Explicit original single-property settings key containing an absolute external Android credential path." },
+      "legacyCredentialsField": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$", "description": "Original settings key containing an absolute external Android credential path." },
+      "legacyMetadataFields": { "type": "object", "additionalProperties": { "enum": ["path", "string-map"] }, "description": "Declared legacy metadata is validated and ignored, never adopted as publication evidence." },
+      "legacyBuildReceiptsField": { "type": "string", "description": "Original platform:profile local receipt path map, read only to reject appVersion runtime collisions." },
       "submissions": { "type": "object", "description": "Explicit local Android internal-track permission. Local evidence never becomes hosted provenance.",
         "additionalProperties": { "type": "object", "required": ["track"], "properties": {
           "track": { "type": "string", "pattern": "^(?:[a-z0-9._-]+:)?internal$" }

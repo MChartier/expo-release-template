@@ -105,6 +105,14 @@ test('absence needs provider proof and never applies to a known ID', async () =>
   assert.equal(retry.retry, true); assert.equal(retry.plan.digest, f.state.plan.digest);
 });
 
+test('unsupported or conflicting correction evidence cannot silently fall through to ordinary observation', async () => {
+  const f = fixture(); f.add('android:build-provider', [{ type: 'accepted', operationId: 'build-1' }]);
+  const input = { ...f.input, providerForStage: async () => ({ status: () => assert.fail('must reject before readback') }),
+    request: { action: 'reconcile', stage: 'android:build-provider', destination: { confirmed: true } } };
+  await assert.rejects(recoverRelease(input), /cannot correct/);
+  await assert.rejects(recoverRelease({ ...input, request: { ...input.request, health: {} } }), /one reconciliation/);
+});
+
 test('completion cannot skip missing stages and finalized releases cannot resume', async () => {
   const f = fixture(); await assert.rejects(recoverRelease({ ...f.input, request: { action: 'complete' } }), /every selected/);
   f.state.release.draft = false;

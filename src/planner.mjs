@@ -103,7 +103,34 @@ export function releaseStages(config, components, selected, operation = 'release
       add(component, 'publish', [exported, ...needs]);
     }
   }
-  return { graph: buildReleaseGraph(stages), stages: specs };
+  const topology = { graph: buildReleaseGraph(stages), stages: specs };
+  publicationWaves(topology);
+  return topology;
+}
+
+/** Assign the fixed workers from actual stage dependencies before any reservation or candidate mutation. */
+export function publicationWaves({ graph, stages }) {
+  const waves = new Map();
+  const wave = id => {
+    if (waves.has(id)) return waves.get(id);
+    const spec = stages[id];
+    const stage = graph.stages.find(value => value.id === id);
+    let result = 1;
+    for (const dependency of stage.needs) {
+      const previous = stages[dependency];
+      if (spec.action === 'handoff' && previous.action === 'submit') result = Math.max(result, wave(dependency) + 1);
+      if (spec.action === 'submit' && previous.action === 'handoff') result = Math.max(result, wave(dependency));
+      if (spec.action === 'export' && previous.action === 'handoff') result = Math.max(result, wave(dependency));
+      if (spec.action === 'export' && previous.action === 'publish'
+        && stages[`${previous.target}:export`]) result = Math.max(result, wave(dependency) + 1);
+      if (spec.action === 'publish' && previous.action === 'export') result = Math.max(result, wave(dependency));
+    }
+    invariant(result <= 2, 'Supported target ordering has at most two publication waves.');
+    waves.set(id, result);
+    return result;
+  };
+  for (const stage of graph.stages) wave(stage.id);
+  return waves;
 }
 
 /** Select effective changes against independently successful baselines and seal the requested source/configuration. */

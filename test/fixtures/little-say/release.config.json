@@ -34,7 +34,7 @@
       "applicationId": "net.darkmachines.littlesay", "runtimePolicy": "appVersion",
       "signing": { "variables": { "file": "LS_KEYSTORE", "storePassword": "LS_STORE_PASSWORD", "alias": "LS_KEY_ALIAS", "keyPassword": "LS_KEY_PASSWORD" } },
       "version": { "file": "native-release.json", "pointer": "/version", "codePointer": "/androidVersionCode" },
-      "submission": { "track": "internal", "releaseStatus": "draft" }
+      "submission": { "file": "apps/mobile/eas.json", "pointer": "/submit/production/android" }
     },
     {
       "id": "ios", "kind": "native", "platform": "ios", "builder": "eas", "localBuilder": "eas", "appDirectory": "apps/mobile",
@@ -64,7 +64,7 @@
     }
   ],
   "nativeGroups": [],
-  "local": { "settingsDirectory": "little-say", "settingsFile": "native.json", "legacyCredentialsField": "credentials" },
+  "local": { "settingsDirectory": "little-say", "settingsFile": "native.json", "legacyCredentialsField": "credentials", "legacyMetadataFields": { "artifactRoot": "path", "baselines": "string-map" }, "legacyBuildReceiptsField": "baselines" },
   "dependencies": [],
   "policy": { "otaForNewRuntime": false, "deployment": "server-or-ota", "runtimeSupportFile": "release-policy.json" },
   "hooks": {

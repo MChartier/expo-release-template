@@ -24,3 +24,4 @@ export { retainedOperationRequest, prepareRetainedOperation, routeRetainedOperat
   restoreRetainedOperationArtifact, retainedOperationProvider, executeRetainedOperation } from './retained-operations.mjs';
 export { createPlayCohortPromotionProvider } from './providers/play-cohort.mjs';
 export { verifyDeploymentReconciliation } from './providers/deploy.mjs';
+export { saveLocalCredentialPaths } from './local-credentials.mjs';

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { generateKeyPairSync } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { configureLocalCredentials, readLocalSettings, localSettingsPath, externalCredential } from '../src/local-credentials.mjs';
+import { configureLocalCredentials, readLocalSettings, localSettingsPath, externalCredential, saveLocalCredentialPaths } from '../src/local-credentials.mjs';
 
 function fixture(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'local-credentials-'));
@@ -68,4 +68,36 @@ test('an explicitly declared legacy single-path setting is read without mutation
   assert.equal(fs.readFileSync(file, 'utf8'), original);
   fs.writeFileSync(file, JSON.stringify({ credentials, unexpected: true })); assert.throws(() => readLocalSettings(args), /legacy credential settings/);
   fs.writeFileSync(file, JSON.stringify({ credentials: 'relative/key.json' })); assert.throws(() => readLocalSettings(args), /legacy credential settings/);
+});
+
+test('original native settings preserve the credential path without adopting artifact caches or rewriting the file', t => {
+  const { args } = fixture(t); args.config.local = { settingsDirectory: 'existing-app', settingsFile: 'native.json', legacyCredentialsField: 'credentials',
+    legacyMetadataFields: { artifactRoot: 'path', baselines: 'string-map' } };
+  const file = localSettingsPath(args.config, args.root, args.environment, args.platform);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const credentials = path.join(path.dirname(file), 'credentials.json');
+  const legacy = { credentials, artifactRoot: path.join(path.dirname(file), 'builds'), baselines: { 'android:internal': path.join(path.dirname(file), 'builds', 'baseline.json') } };
+  const original = JSON.stringify(legacy); fs.writeFileSync(file, original);
+  assert.deepEqual(readLocalSettings(args).settings, { schemaVersion: 1, targets: { [args.target]: { credentialsFile: credentials } }, legacy });
+  assert.equal(fs.readFileSync(file, 'utf8'), original);
+  delete legacy.credentials; fs.writeFileSync(file, JSON.stringify(legacy));
+  assert.deepEqual(readLocalSettings(args).credentials, {});
+  legacy.baselines['android:internal'] = { protected: true }; fs.writeFileSync(file, JSON.stringify(legacy));
+  assert.throws(() => readLocalSettings(args), /legacy metadata/);
+});
+
+test('explicit credential path updates preserve original metadata and fail atomically for checkout paths', t => {
+  const { args } = fixture(t); args.config.local = { legacyCredentialsField: 'credentials', legacyMetadataFields: { baselines: 'string-map' } };
+  const file = localSettingsPath(args.config, args.root, args.environment, args.platform);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const credentialsFile = path.join(path.dirname(file), 'credentials.json'); fs.writeFileSync(credentialsFile, '{}');
+  const original = { credentials: credentialsFile, baselines: { 'android:internal': path.join(path.dirname(file), 'baseline.json') } };
+  fs.writeFileSync(file, JSON.stringify(original));
+  const saved = saveLocalCredentialPaths({ ...args, credentialsFile });
+  assert.deepEqual(saved.settings.legacy, original);
+  const before = fs.readFileSync(file, 'utf8');
+  const inside = path.join(args.root, 'key.json'); fs.writeFileSync(inside, '{}');
+  assert.throws(() => saveLocalCredentialPaths({ ...args, credentialsFile: inside }), /outside/);
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+  assert.equal(readLocalSettings(args).credentials.credentialsFile, credentialsFile);
 });

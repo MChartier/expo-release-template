@@ -12,6 +12,8 @@ import { validateConfig } from '../src/config.mjs';
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'local-eas-'));
+  const settings = fs.mkdtempSync(path.join(os.tmpdir(), 'local-eas-settings-'));
+  t.after(() => fs.rmSync(settings, { recursive: true, force: true }));
   t.after(() => { assert.equal(path.dirname(path.resolve(root)), path.resolve(os.tmpdir())); fs.rmSync(root, { recursive: true, force: true }); });
   const config = { schemaVersion: 1, repository: 'fixture/app', defaultBranch: 'main', defaultProfile: 'internal',
     profiles: { internal: { easProfile: 'internal', channel: 'internal', environment: 'preview', submit: false } },
@@ -22,7 +24,8 @@ function fixture(t) {
   const source = { repository: config.repository, commit: 'a'.repeat(40), toolkitCommit: 'b'.repeat(40), origin: 'local' };
   const plan = planRelease({ config, source, origin: { kind: 'local' }, operation: 'build', observations });
   const prepared = finalizePlan(plan, source, observations); const calls = [];
-  const environment = { EXPO_TOKEN: 'expo-sentinel', GH_TOKEN: 'github-sentinel', ANDROID_STORE_PASSWORD: 'android-sentinel', NODE_OPTIONS: '--unsafe', HOME: root };
+  const environment = { EXPO_TOKEN: 'expo-sentinel', GH_TOKEN: 'github-sentinel', ANDROID_STORE_PASSWORD: 'android-sentinel', NODE_OPTIONS: '--unsafe', HOME: root,
+    LOCALAPPDATA: settings, XDG_CONFIG_HOME: settings };
   const args = { plan: prepared, component: prepared.components[0], root, outputRoot: path.join(root, 'output'),
     inputs: { environment: observations[0].environment, hash: observations[0].environmentHash, components: {} }, environment,
     platform: 'darwin', verifySource: () => calls.push('source'),

@@ -67,6 +67,8 @@ test('an explicit local command override retains the hosted EAS builder and orig
 
 test('the actual local command pipeline prepares without credentials and admits a temporary key only during compilation', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'local-command-boundary-'));
+  const settings = fs.mkdtempSync(path.join(os.tmpdir(), 'local-runtime-settings-'));
+  t.after(() => fs.rmSync(settings, { recursive: true, force: true }));
   t.after(() => { assert.equal(path.dirname(path.resolve(root)), path.resolve(os.tmpdir())); fs.rmSync(root, { recursive: true, force: true }); });
   const config = { schemaVersion: 1, repository: 'fixture/app', defaultBranch: 'main', components: [{ id: 'android', kind: 'native',
     platform: 'android', builder: 'eas', localBuilder: 'command', runtimePolicy: 'appVersion',
@@ -87,7 +89,7 @@ else {assert.equal(request.action,'verify');assert(!process.env.APP_KEYSTORE&&!r
   git(['init', '--quiet']); git(['add', '.']); git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m', 'fixture']);
   const source = { repository: config.repository, commit: git(['rev-parse', 'HEAD']), toolkitCommit: 'b'.repeat(40), origin: 'local' };
   const plan = planRelease({ config, source, observations, origin: { kind: 'local' }, operation: 'build' });
-  const result = await buildLocally({ plan, root, environment: { EXPO_TOKEN: 'must-not-reach-hooks' }, signing: () => {
+  const result = await buildLocally({ plan, root, environment: { LOCALAPPDATA: settings, XDG_CONFIG_HOME: settings, EXPO_TOKEN: 'must-not-reach-hooks' }, signing: () => {
     assert(fs.existsSync(path.join(root, 'generated/prepared')));
     return { ANDROID_KEYSTORE_BASE64: Buffer.alloc(256, 7).toString('base64'), ANDROID_STORE_PASSWORD: 'fixture-password', ANDROID_KEY_ALIAS: 'upload', ANDROID_KEY_PASSWORD: 'fixture-password' };
   } });

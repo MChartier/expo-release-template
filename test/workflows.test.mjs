@@ -8,6 +8,7 @@ import { parse } from 'yaml';
 import { phaseMatrices, verifyRunReservation } from '../src/worker.mjs';
 import { signingSecretNames } from '../src/artifact-worker.mjs';
 import { planRelease, completedBaseline } from '../src/planner.mjs';
+import { validateConfig } from '../src/config.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const files = fs.readdirSync(path.join(root, '.github/workflows')).filter(file => file.endsWith('.yml'));
@@ -95,6 +96,37 @@ test('a partially retained cohort resumes the original group leader with every c
     origin: { kind: 'local' }, observations: config.components.map(({ id }) => ({ id, identity: id, version: '1.0.0', runtime: id })) });
   assert.deepEqual(phaseMatrices(plan, ['wear:build']).native_builds,
     [{ id: 'pair', target: 'phone', targets: ['phone', 'wear'], builder: 'command', approval: '' }]);
+});
+
+test('OTA scheduling follows native handoff waves and build-only profiles before any candidate is created', () => {
+  const config = { schemaVersion: 1, repository: 'fixture/app', defaultBranch: 'main', components: [
+    { id: 'phone', kind: 'native', platform: 'android', builder: 'command' },
+    { id: 'wear', kind: 'native', platform: 'android', builder: 'command', after: ['phone'] },
+    { id: 'wear-ota', kind: 'ota', platform: 'android', nativeTarget: 'wear', channel: 'internal', environment: 'preview' }] };
+  const input = { config, source: { repository: config.repository, commit: 'a'.repeat(40), toolkitCommit: 'b'.repeat(40), origin: 'local' },
+    origin: { kind: 'local' }, observations: config.components.map(({ id }) => ({ id, identity: id, version: '1.0.0', runtime: '1.0.0' })) };
+  const plan = planRelease(input);
+  assert.deepEqual(phaseMatrices(plan).ota_first, []);
+  assert.deepEqual(phaseMatrices(plan).ota_second, [{ target: 'wear-ota', approval: '' }]);
+  assert.deepEqual(phaseMatrices(plan, ['wear-ota:export', 'wear-ota:publish']).ota_second, [{ target: 'wear-ota', approval: '' }]);
+  for (const component of config.components.filter(value => value.kind === 'native')) component.submit = false;
+  assert.deepEqual(phaseMatrices(planRelease(input)).ota_first, [{ target: 'wear-ota', approval: '' }]);
+  for (const job of ['ota-first-export', 'ota-second-export', 'native-second-handoff']) {
+    assert(workflows['release-components.yml'].jobs[job].needs.includes('native-build'), `${job} can race a pending build when submission jobs are skipped`);
+    assert(workflows['release-components.yml'].jobs[job].needs.includes('deployment'));
+  }
+  for (const component of config.components.filter(value => value.kind === 'native')) component.submit = true;
+  config.components.push({ ...config.components[2], id: 'wear-production', after: ['wear-ota'] });
+  input.observations.push({ ...input.observations[2], id: 'wear-production' });
+  assert.throws(() => planRelease(input), /at most two publication waves/);
+});
+
+test('configuration rejects ignored publication constraints and conflicting version ownership', () => {
+  const components = [{ id: 'server', kind: 'server' }, { id: 'phone', kind: 'native', platform: 'android', builder: 'eas' }];
+  const config = { schemaVersion: 1, repository: 'fixture/app', defaultBranch: 'main', components };
+  assert.throws(() => validateConfig({ ...config, components: [{ ...components[0], after: ['phone'] }, components[1]] }), /predecessor kind/);
+  assert.throws(() => validateConfig({ ...config, versionGroups: [{ id: 'one', targets: ['phone'] }, { id: 'two', targets: ['phone'] }] }), /at most one version group/);
+  assert.throws(() => validateConfig({ ...config, versionGroups: [{ id: 'one', targets: ['phone'] }, { id: 'one', targets: ['server'] }] }), /Duplicate version group/);
 });
 
 test('historical workers route only their provider credentials and approvals; recovery downloads the producing cloud run', () => {

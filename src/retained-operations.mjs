@@ -11,6 +11,7 @@ import { verifyProducer } from './github.mjs';
 import { verifyReceiptAttestation } from './attestation.mjs';
 import { restoreCalibrateNative } from './compat/calibrate-recovery.mjs';
 import { createEasStage } from './eas-stages.mjs';
+import { latestOperation } from './operations.mjs';
 import { runProviderStage, stageContext } from './stages.mjs';
 import { finalizeServer } from './server-release.mjs';
 import { createGhcrTransport } from './providers/ghcr.mjs';
@@ -187,7 +188,7 @@ export async function retainedOperationProvider({ ledger, state, stage, director
     else if (route.provider === 'expo') {
       const artifact = await load(spec.target);
       workspace = await createEasStage({ action: 'submit', plan: original.plan, component: spec.target, artifact, sourceProof: artifact.sourceProof,
-        transport: easTransport, providerEnvironment: environment }); provider = workspace.provider;
+        transport: easTransport, providerEnvironment: environment, operation: latestOperation(state.events, stage) }); provider = workspace.provider;
     } else {
       const policy = plan.config.promotions[spec.promotion]; const targets = [];
       for (const target of spec.targets) {

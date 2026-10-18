@@ -5,7 +5,8 @@ import { isVerifiedSourceProof } from './artifacts.mjs';
 import { repositoryPath } from './config.mjs';
 import { resolveConfigurationValue, resolveExpoConfiguration } from './environment.mjs';
 import { sourceEnvironment } from './hooks.mjs';
-import { createEasTransport, createEasBuildProvider, createEasSubmissionProvider, createEasOtaProvider, exportPayload, preflightEasSigning } from './providers/eas.mjs';
+import { createEasTransport, createEasBuildProvider, createEasOtaProvider, exportPayload, preflightEasSigning } from './providers/eas.mjs';
+import { createCorrectableEasSubmissionProvider } from './providers/eas-correction.mjs';
 import { createEasPublisherWorkspace } from './providers/eas-workspace.mjs';
 
 /** Project only valid native version fields from a retained baseline; never override project, signing, server or channel identity. */
@@ -50,7 +51,7 @@ function verifiedArtifact({ plan, component, artifact, sourceProof }) {
  * verified metadata contains expo, expoConfig, destination and native evidence, or OTA branch/payload.
  * The caller owns dispose(); no application configuration is evaluated by submission/OTA workspaces.
  */
-export async function createEasStage({ action, plan, component, artifact, sourceProof, environment, transport, binding,
+export async function createEasStage({ action, plan, component, artifact, sourceProof, environment, transport, binding, operation,
   root = process.cwd(), providerEnvironment = process.env }) {
   verifyPlan(plan);
   const target = typeof component === 'string' ? plan.components.find(value => value.id === component) : component;
@@ -139,7 +140,7 @@ export async function createEasStage({ action, plan, component, artifact, source
   const workspace = createEasPublisherWorkspace({ ...spec, expoConfig }, { env: publisherEnvironment });
   try {
     const provider = transport || workspace.transport;
-    return { spec, provider: target.kind === 'ota' ? createEasOtaProvider(spec, provider) : createEasSubmissionProvider(spec, provider),
+    return { spec, provider: target.kind === 'ota' ? createEasOtaProvider(spec, provider) : createCorrectableEasSubmissionProvider({ spec, transport: provider, operation }),
       /** Dispose only the generated data-only publisher workspace. */
       dispose: () => workspace.dispose() };
   } catch (error) { workspace.dispose(); throw error; }

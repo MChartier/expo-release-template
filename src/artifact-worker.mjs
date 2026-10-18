@@ -20,6 +20,7 @@ import { createEasTransport } from './providers/eas.mjs';
 import { verifyOtaExports, publishOta } from './ota.mjs';
 import { finalizeServer } from './server-release.mjs';
 import { calibrateOtaLedger } from './compat/calibrate-ota.mjs';
+import { latestOperation } from './operations.mjs';
 
 /** Route signing secrets only to an explicitly configured command Android builder. */
 export function signingSecretNames(component) {
@@ -180,7 +181,8 @@ export async function artifactWorker(command, environment = process.env) {
       providerEnvironment: environment, retryStage: environment.RELEASE_RETRY_STAGE });
     const { createEasStage } = await import('./eas-stages.mjs');
     const built = await createEasStage({ action: component.kind === 'ota' ? 'publish' : action, plan, component, artifact,
-      sourceProof: artifact.sourceProof, providerEnvironment: environment });
+      sourceProof: artifact.sourceProof, providerEnvironment: environment,
+      operation: latestOperation((await ledger.read(releaseId)).events, `${target}:submit`) });
     try { return await runProviderStage({ ledger, releaseId, target, action: component.kind === 'ota' ? 'publish' : 'submit',
       provider: built.provider, handoff: action === 'handoff', retry: environment.RELEASE_RETRY_STAGE === `${target}:submit` }); }
     finally { built.dispose?.(); }

@@ -31,7 +31,7 @@ export interface ReleaseConfiguration {
   hooks?: Partial<Record<'inspect' | 'prepare' | 'validate' | 'build' | 'verify', { command: string[]; timeoutMs?: number }>>;
   versionGroups?: { id: string; targets: string[]; version?: JsonMapping; bump?: 'requested' | 'patch'; codeAllocation?: 'global' | 'independent'; minimumCode?: number; lanes?: Record<string, { modulus: number; residue: number }>; reusePrepared?: boolean }[];
   nativeGroups?: string[][]; dependencies?: { component: string; requires: string[]; when?: string }[];
-  local?: { settingsDirectory?: string; settingsFile?: string; legacyCredentialsField?: string; submissions?: Record<string, { track: string }> ; [key: string]: unknown };
+  local?: { settingsDirectory?: string; settingsFile?: string; legacyCredentialsField?: string; legacyMetadataFields?: Record<string, 'path' | 'string-map'>; legacyBuildReceiptsField?: string; submissions?: Record<string, { track: string }> ; [key: string]: unknown };
   promotions?: Record<string, PromotionConfiguration>;
   expo?: Record<string, unknown>; inspection?: { environment?: PublicEnvironment }; [key: string]: unknown;
 }
@@ -169,6 +169,8 @@ export interface OperationProvider {
   verifyAbsence?(evidence: unknown, context?: Record<string, unknown>): Promise<Record<string, unknown>>;
   /** Verify explicit operator evidence for a provider that cannot query an earlier request. */
   reconcile?(evidence: unknown, context?: Record<string, unknown>): Promise<Record<string, unknown>>;
+  /** Verify a rejected destination against identical artifacts and the already authorized destination. */
+  reconcileDestination?(evidence: unknown, context?: Record<string, unknown>): Promise<Record<string, unknown>>;
 }
 /** Return a stage's latest durable operation, never an earlier success. */
 export function latestOperation(events: StageReceipt[], stage: string): OperationState | null;
@@ -231,7 +233,7 @@ export function baselineRuntimeOverrides(baseline: Record<string, any>): { versi
 /** Verify full fingerprint, environment, ancestry and runtime retirement before using an older native runtime. */
 export function verifyCompatibleRuntime(input: { component: TargetConfiguration; baseline: Record<string, any>; observation: ComponentObservation; source: string; profile: string; isAncestor: (ancestor: string, source: string) => Promise<boolean>; retiredRuntimes?: { profile: string; platform: string; runtimeVersion: string }[] }): Promise<Record<string, unknown>>;
 /** Compose one EAS stage from sealed provider configuration and original verified retained metadata; caller owns disposal. */
-export function createEasStage(input: { action: 'build' | 'handoff' | 'submit' | 'publish'; plan: PipelinePlan; component: string | PipelinePlan['components'][number]; artifact?: { directory: string; receipt: ArtifactReceipt }; sourceProof?: VerifiedSourceProof; environment?: ReleaseEnvironment; transport?: EasTransport; root?: string; providerEnvironment?: NodeJS.ProcessEnv; binding?: OtaRuntimeBinding }): Promise<{ spec: Record<string, any>; provider: OperationProvider; preflight?: () => Promise<Record<string, unknown>>;
+export function createEasStage(input: { action: 'build' | 'handoff' | 'submit' | 'publish'; plan: PipelinePlan; component: string | PipelinePlan['components'][number]; artifact?: { directory: string; receipt: ArtifactReceipt }; sourceProof?: VerifiedSourceProof; environment?: ReleaseEnvironment; transport?: EasTransport; root?: string; providerEnvironment?: NodeJS.ProcessEnv; binding?: OtaRuntimeBinding; operation?: OperationState | null }): Promise<{ spec: Record<string, any>; provider: OperationProvider; preflight?: () => Promise<Record<string, unknown>>;
   /** Remove the data-only publisher workspace; retained artifacts remain caller-owned. */
   dispose(): void;
 }>;
@@ -278,7 +280,7 @@ export function bootstrapServerBaseline(input: { config: ReleaseConfiguration; c
 
 export interface RecoveryRequest {
   action: 'resume' | 'retry' | 'reconcile' | 'abandon' | 'complete'; planDigest?: string; stage?: string;
-  operationId?: string; absence?: Record<string, unknown>; health?: DeploymentReconciliation; reason?: string;
+  operationId?: string; destination?: Record<string, unknown>; absence?: Record<string, unknown>; health?: DeploymentReconciliation; reason?: string;
 }
 export interface LegacyRecoveryAdapter {
   /** Reverify original provider evidence and append a separately authenticated recovery action. */
@@ -388,3 +390,5 @@ export interface DeploymentReconciliation {
 /** Validate explicit operator service-log evidence for one webhook attempt; health never proves an exact deployed image digest. */
 export function verifyDeploymentReconciliation(value: unknown, spec: { service: string }, context: { planDigest: string; operationKey: string; attempt: number },
   outcome: DeploymentReconciliation['outcome']): DeploymentReconciliation & { evidenceKind: 'operator-service-log-reconciliation'; healthy?: true };
+/** Atomically save one target's external credential paths while preserving original settings and other targets. */
+export function saveLocalCredentialPaths(input: { config: ReleaseConfiguration; root: string; target: string; credentialsFile: string; serviceAccountFile?: string; environment?: NodeJS.ProcessEnv; platform?: NodeJS.Platform }): { file: string; settings: Record<string, any>; credentials: { credentialsFile: string; serviceAccountFile?: string } };

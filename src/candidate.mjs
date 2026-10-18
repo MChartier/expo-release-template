@@ -112,11 +112,23 @@ export async function verifyCandidateChecks({ api, plan, candidate, origin, work
     && run.run_attempt === Number(origin.runAttempt), 'Validation must belong to the exact trusted run attempt.');
   const reference = (run.referenced_workflows ?? []).find(workflow => workflow.path?.startsWith('MChartier/expo-release-template/.github/workflows/release-handler.yml@'));
   invariant(reference?.sha === toolkitCommit, 'Trusted run does not reference the validated toolkit revision.');
-  const response = await api(`/actions/runs/${origin.runId}/jobs?filter=latest&per_page=100`);
-  invariant(response.total_count <= 100 && Array.isArray(response.jobs), 'Validation job inventory exceeds its bound.');
+  const inventory = []; const seen = new Set(); let total;
+  for (let page = 1; page <= 100; page++) {
+    const response = await api(`/actions/runs/${origin.runId}/jobs?filter=latest&per_page=100&page=${page}`);
+    total ??= response.total_count;
+    invariant(Number.isSafeInteger(total) && total >= 0 && total <= 10000 && response.total_count === total
+      && Array.isArray(response.jobs) && response.jobs.length <= 100, 'Invalid or changing validation job inventory.');
+    for (const job of response.jobs) {
+      invariant(Number.isSafeInteger(job.id) && !seen.has(job.id), 'Repeated or invalid validation job identity.');
+      seen.add(job.id); inventory.push(job);
+    }
+    if (inventory.length === total) break;
+    invariant(inventory.length < total && response.jobs.length === 100, 'Incomplete validation job inventory.');
+  }
+  invariant(inventory.length === total, 'Validation job inventory exceeds its bound.');
   const required = ['source', 'candidate'].map(role => `Release validation (${role})`);
   for (const name of required) {
-    const jobs = response.jobs.filter(job => job.name === name || job.name.endsWith(` / ${name}`));
+    const jobs = inventory.filter(job => job.name === name || job.name.endsWith(` / ${name}`));
     invariant(jobs.length === 1 && jobs[0].status === 'completed' && jobs[0].conclusion === 'success'
       && Number(jobs[0].run_attempt) > 0 && Number(jobs[0].run_attempt) <= Number(origin.runAttempt), `Exact ${name} validation did not succeed.`);
   }
@@ -124,7 +136,7 @@ export async function verifyCandidateChecks({ api, plan, candidate, origin, work
     const current = await api(`/git/commits/${candidate.commit}`);
     invariant(current.parents.length === 1 && current.parents[0].sha === plan.source.commit && current.tree.sha === candidate.tree, 'Validated candidate ancestry or tree changed.');
   } else invariant(candidate.commit === plan.source.commit, 'Unmodified candidate differs from the requested source.');
-  return { candidateAttempt: response.jobs.find(job => job.name === 'Release validation (candidate)' || job.name.endsWith(' / Release validation (candidate)')).run_attempt };
+  return { candidateAttempt: inventory.find(job => job.name === 'Release validation (candidate)' || job.name.endsWith(' / Release validation (candidate)')).run_attempt };
 }
 
 /** Merge only through the protected PR API with exact-head locking and pre/post merge-parent/tree verification. */

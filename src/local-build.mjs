@@ -10,6 +10,7 @@ import { localSigningInputs } from './local-credentials.mjs';
 import { writeLocalReceipt } from './ledger.mjs';
 import { repositoryPath } from './config.mjs';
 import { buildLocalEas } from './local-eas.mjs';
+import { localRuntimeGuard } from './local-runtime.mjs';
 
 /** Build each configured native cohort once, record exact local evidence, and never call a publication provider. */
 export async function buildLocally({ plan, root, environment = process.env, credentialsFile,
@@ -21,6 +22,7 @@ export async function buildLocally({ plan, root, environment = process.env, cred
   const builder = component => component.localBuilder ?? component.builder;
   invariant(selected.length && selected.every(component => component.kind === 'native' &&
     (builder(component) === 'command' || component.platform === 'ios' && component.localBuilder === 'eas')), 'Local builds require an explicit supported native builder.');
+  const runtimeGuard = localRuntimeGuard({ plan, root, environment });
   const inputs = { expo: plan.providerConfiguration.expo, components: Object.fromEntries(plan.components.map(component => [component.id, {
     environment: component.observation.environment ?? {}, hash: component.observation.environmentHash ?? null }])) };
   const prepared = finalizePlan(plan, plan.source, plan.components.map(component => component.observation));
@@ -54,5 +56,6 @@ export async function buildLocally({ plan, root, environment = process.env, cred
     }
   }
   invariant(hashIdentity(results.map(value => value.target).sort()) === hashIdentity(selected.map(value => value.id).sort()), 'Local build did not produce exactly its selected targets.');
+  runtimeGuard.record();
   return writeLocalReceipt(root, prepared, results);
 }

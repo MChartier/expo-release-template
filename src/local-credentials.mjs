@@ -37,21 +37,45 @@ export function localSettingsPath(config, root, environment = process.env, platf
   return resolved;
 }
 
-/** Read path-only settings, including the earlier single-target layout, without opening signing or Play keys. */
+/** Read path-only settings and declared legacy metadata without opening keys or adopting a historical local cache as release evidence. */
 export function readLocalSettings({ config, root, target, environment, platform }) {
   const file = localSettingsPath(config, root, environment, platform);
   if (!fs.existsSync(file)) return { file, settings: { schemaVersion: 1 }, credentials: {} };
   let settings = JSON.parse(fs.readFileSync(file, 'utf8'));
   const legacyField = config.local?.legacyCredentialsField;
   if (legacyField && settings?.schemaVersion === undefined) {
-    invariant(/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(legacyField) && target && Object.keys(settings).length === 1
-      && Object.hasOwn(settings, legacyField) && typeof settings[legacyField] === 'string' && path.isAbsolute(settings[legacyField]), 'Unsupported legacy credential settings.');
-    settings = { schemaVersion: 1, targets: { [target]: { credentialsFile: settings[legacyField] } } };
+    const metadata = config.local?.legacyMetadataFields ?? {};
+    invariant(/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(legacyField) && target && settings && !Array.isArray(settings)
+      && Object.entries(metadata).every(([key, type]) => /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key)
+        && key !== legacyField && ['path', 'string-map'].includes(type))
+      && Object.keys(settings).every(key => key === legacyField || Object.hasOwn(metadata, key))
+      && (!Object.hasOwn(settings, legacyField) || typeof settings[legacyField] === 'string' && path.isAbsolute(settings[legacyField])), 'Unsupported legacy credential settings.');
+    for (const [key, type] of Object.entries(metadata)) if (Object.hasOwn(settings, key)) {
+      const value = settings[key];
+      invariant(type === 'path' ? typeof value === 'string' && path.isAbsolute(value)
+        : value && typeof value === 'object' && !Array.isArray(value) && Object.values(value).every(item => typeof item === 'string'), 'Unsupported legacy metadata settings.');
+    }
+    settings = { schemaVersion: 1, targets: { [target]: settings[legacyField] ? { credentialsFile: settings[legacyField] } : {} }, legacy: settings };
   }
-  invariant(settings.schemaVersion === 1 && Object.keys(settings).every(key => ['schemaVersion', 'targets', 'credentialsFile', 'serviceAccountFile'].includes(key)), 'Unsupported local settings.');
+  invariant(settings.schemaVersion === 1 && Object.keys(settings).every(key => ['schemaVersion', 'targets', 'credentialsFile', 'serviceAccountFile', 'legacy'].includes(key)), 'Unsupported local settings.');
   const credentials = settings.targets?.[target] ?? settings;
   for (const key of ['credentialsFile', 'serviceAccountFile']) if (credentials[key]) invariant(path.isAbsolute(credentials[key]), 'Saved credentials must be absolute paths.');
   return { file, settings, credentials };
+}
+
+/** Atomically replace one target's external paths while preserving other targets and original settings evidence. */
+export function saveLocalCredentialPaths({ config, root, target, credentialsFile, serviceAccountFile, environment, platform }) {
+  invariant(typeof target === 'string' && config.components.some(value => value.id === target && value.kind === 'native'), 'Choose a configured native credential target.');
+  const previous = readLocalSettings({ config, root, target, environment, platform });
+  const credentials = { credentialsFile: externalCredential(root, credentialsFile),
+    ...(serviceAccountFile ? { serviceAccountFile: externalCredential(root, serviceAccountFile) } : {}) };
+  const settings = { schemaVersion: 1, ...(previous.settings.legacy ? { legacy: previous.settings.legacy } : {}),
+    targets: { ...previous.settings.targets, [target]: credentials } };
+  fs.mkdirSync(path.dirname(previous.file), { recursive: true, mode: 0o700 });
+  const temporary = `${previous.file}.${randomUUID()}.tmp`;
+  try { fs.writeFileSync(temporary, `${JSON.stringify(settings, null, 2)}\n`, { flag: 'wx', mode: 0o600 }); fs.renameSync(temporary, previous.file); }
+  finally { fs.rmSync(temporary, { force: true }); }
+  return { file: previous.file, settings, credentials };
 }
 
 /** Read signing contents only after credential-free prebuild has succeeded. */
@@ -95,11 +119,7 @@ export async function configureLocalCredentials({ config, root, target, serviceA
       if (!serviceAccountFile) fs.writeFileSync(playFile, `${JSON.stringify(account)}\n`, { flag: 'wx', mode: 0o600 });
     } else log('No Play key is assigned to this app. Build/install remain available; assign a key in EAS before local submission.');
     localSigningInputs({ config, root, target: component.id, credentialsFile, environment, platform });
-    const settings = { schemaVersion: 1, targets: { ...previous.settings.targets,
-      [component.id]: { credentialsFile, ...(playFile ? { serviceAccountFile: playFile } : {}) } } };
-    const temporary = `${previous.file}.${randomUUID()}.tmp`;
-    try { fs.writeFileSync(temporary, `${JSON.stringify(settings, null, 2)}\n`, { flag: 'wx', mode: 0o600 }); fs.renameSync(temporary, previous.file); }
-    finally { fs.rmSync(temporary, { force: true }); }
+    saveLocalCredentialPaths({ config, root, target: component.id, credentialsFile, serviceAccountFile: playFile, environment, platform });
     committed = true;
     return { file: previous.file, target: component.id, credentialsFile, ...(playFile ? { serviceAccountFile: playFile } : {}) };
   } catch {

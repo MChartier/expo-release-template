@@ -39,7 +39,12 @@ export async function recoverRelease({ ledger, releaseId, request, providerForSt
     invariant(context?.planDigest === state.plan.digest, 'Provider operation belongs to another prepared plan.');
     let next = operation;
     if (next.status === 'intent') next = reduceOperation(next, { type: 'unknown', reason: 'Interrupted request requires provider observation.' });
-    if (request.health !== undefined) {
+    invariant(['health', 'absence', 'destination'].filter(key => request[key] !== undefined).length <= 1, 'Choose exactly one reconciliation evidence type.');
+    if (request.destination !== undefined) {
+      invariant(provider.reconcileDestination && next.operationId, 'This provider cannot correct a destination without a retained provider ID.');
+      const proof = await provider.reconcileDestination(request.destination, context);
+      next = reduceOperation(next, { type: 'failed', definitive: true, reason: 'Rejected destination correction requires a separate explicit retry.', proof });
+    } else if (request.health !== undefined) {
       invariant(provider.reconcile && ['intent', 'unknown', 'accepted'].includes(next.status), 'This provider cannot reconcile health evidence.');
       const proof = await provider.reconcile(request.health, context);
       next = reduceOperation(next, { type: 'complete', receipt: proof, proof });

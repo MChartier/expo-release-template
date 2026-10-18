@@ -13,6 +13,7 @@ import { createGhcrProvider, createGhcrTransport } from './providers/ghcr.mjs';
 import { createDeploymentProvider } from './providers/deploy.mjs';
 import { verifyOtaExports } from './ota.mjs';
 import { retainedOperationProvider } from './retained-operations.mjs';
+import { latestOperation } from './operations.mjs';
 
 /** Identify one configured target without splitting identifiers that may themselves contain colons. */
 export function recoveryTarget(plan, stage) {
@@ -52,5 +53,5 @@ export async function recoveryProvider({ ledger, state, stage, directory, enviro
     invariant(binding, 'Reconcile the exact retained OTA runtime operation.');
   } else invariant(stage === `${target}:submit`, 'Reconcile the native submission operation.');
   return createEasStage({ action: component.kind === 'ota' ? 'publish' : 'submit', plan, component, artifact,
-    binding, sourceProof: artifact.sourceProof, providerEnvironment: environment });
+    binding, sourceProof: artifact.sourceProof, providerEnvironment: environment, operation: latestOperation(state.events, stage) });
 }

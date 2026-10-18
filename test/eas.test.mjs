@@ -12,6 +12,8 @@ import { createArtifactReceipt, verifyRetainedArtifact } from '../src/artifacts.
 import { planRelease } from '../src/planner.mjs';
 import { executeOperation, latestOperation } from '../src/operations.mjs';
 import { reduceOperation } from '../packages/release-engine/index.mjs';
+import { createCorrectableEasSubmissionProvider } from '../src/providers/eas-correction.mjs';
+import { recoverRelease } from '../src/recovery.mjs';
 
 const buildId = '00000000-0000-4000-8000-000000000001';
 const submissionId = '00000000-0000-4000-8000-000000000002';
@@ -115,6 +117,45 @@ test('submission retries refresh provider facts and use the exact failed ID', as
   assert.equal(next.id, retryId); assert.equal(next.status, 'accepted');
   assert.deepEqual(f.calls, [['submit:retry', submissionId, '--non-interactive', '--json']]);
   assert.equal((await provider.find({ previousIds: [submissionId] })).id, retryId);
+});
+
+test('common destination reconciliation preserves the old request and requires a separate fresh verified correction retry', async () => {
+  const f = fixture(); f.submission.status = 'ERRORED'; f.submission.androidConfig.track = 'invalid-track';
+  f.build.submissions.push({ id: submissionId });
+  const source = { repository: 'fixture/app', commit: 'a'.repeat(40), workflowCommit: 'a'.repeat(40), toolkitCommit: 'c'.repeat(40) };
+  const config = { schemaVersion: 1, repository: source.repository, defaultBranch: 'main', components: [
+    { id: 'android', kind: 'native', platform: 'android', builder: 'eas' }] };
+  const plan = planRelease({ config, source, origin: { kind: 'github', runId: '123', runAttempt: 1 },
+    observations: [{ id: 'android', identity: 'native', runtime: '1.2.3' }] });
+  const stage = 'android:submit'; const context = { planDigest: plan.digest };
+  const operation = reduceOperation(reduceOperation(null, { type: 'intent', operationKey: stage, request: context }), { type: 'accepted', operationId: submissionId });
+  const state = { release: { id: 1, draft: true }, plan, events: [{ stage, status: 'accepted', operation }] };
+  const ledger = { read: async () => structuredClone(state), append: async (_id, event) => state.events.push(structuredClone(event)) };
+  const input = { ledger, releaseId: 1, stage, context };
+  const factory = () => createCorrectableEasSubmissionProvider({ spec: f.spec, transport: f.transport, operation: latestOperation(state.events, stage) });
+  const destination = { confirmed: true, reason: 'Reviewed the rejected upload and confirmed no store publication.',
+    operationId: submissionId, artifactSha256: digest, from: 'invalid-track', to: 'internal' };
+  const request = { action: 'reconcile', stage, destination };
+  await assert.rejects(recoverRelease({ ...input, request: { ...request, destination: { ...destination, to: 'production' } }, providerForStage: factory }), /sealed destination/);
+  const wrongReadback = f.transport.getSubmission;
+  f.transport.getSubmission = async id => ({ ...await wrongReadback(id), id: retryId });
+  await assert.rejects(recoverRelease({ ...input, request, providerForStage: factory }), /readback ID/);
+  f.transport.getSubmission = wrongReadback;
+  await recoverRelease({ ...input, request, providerForStage: factory });
+  assert.equal(f.calls.length, 0); assert.equal(state.events[0].operation.operationId, submissionId);
+  await assert.rejects(executeOperation({ ...input, provider: factory() }), /explicit retry/);
+  f.submission.status = 'IN_PROGRESS';
+  await assert.rejects(executeOperation({ ...input, provider: factory(), retry: true }), /rejection/);
+  assert.equal(f.calls.length, 0); f.submission.status = 'ERRORED';
+  f.transport.cli = async args => {
+    f.calls.push(args); assert.equal(args[0], 'submit');
+    f.submissions.set(retryId, { ...f.submission, id: retryId, status: 'IN_QUEUE', androidConfig: { track: 'internal', releaseStatus: 'DRAFT' } });
+    f.build.submissions.push({ id: retryId }); return '';
+  };
+  const result = await executeOperation({ ...input, provider: factory(), retry: true });
+  assert.equal(result.operationId, retryId); assert.equal(result.history[0].operationId, submissionId);
+  assert.equal(result.history[0].proof.from, 'invalid-track'); assert.equal(result.proof.destination.track, 'internal');
+  assert.equal(f.calls.length, 1); assert.equal(state.plan.digest, plan.digest);
 });
 
 test('expired retries, cancellations, wrong destinations and altered bytes never authorize upload', async () => {

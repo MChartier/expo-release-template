@@ -117,7 +117,7 @@ jobs:
     secrets:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
   native-second-handoff:
-    needs: [native-first-submit]
+    needs: [native-build, deployment, native-first-submit]
     if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).native_second != '[]' }}
     strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).native_second) }}' } }
     permissions: { contents: write, actions: read, attestations: read }
@@ -145,7 +145,7 @@ jobs:
     secrets:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
   ota-first-export:
-    needs: [deployment, native-first-handoff]
+    needs: [deployment, native-build, native-first-handoff]
     if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).ota_first != '[]' }}
     strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).ota_first) }}' } }
     permissions: { contents: write, actions: read, id-token: write, attestations: write }
@@ -172,7 +172,7 @@ jobs:
     secrets:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
   ota-second-export:
-    needs: [ota-first-publish, native-second-handoff]
+    needs: [deployment, native-build, ota-first-publish, native-second-handoff]
     if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).ota_second != '[]' }}
     strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).ota_second) }}' } }
     permissions: { contents: write, actions: read, id-token: write, attestations: write }

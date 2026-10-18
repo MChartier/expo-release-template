@@ -9,7 +9,7 @@ import { legacyReaders } from './compat/index.mjs';
 import { authorizeRequest, validateRequest, repositoryJson } from './trusted.mjs';
 import { readReleaseEnvironment, resolveConfigurationValue } from './environment.mjs';
 import { inspectSource, prepareSource, sourceGit, verifyToolkitPins } from './source.mjs';
-import { planRelease, finalizePlan, bindMergedPlan } from './planner.mjs';
+import { planRelease, finalizePlan, bindMergedPlan, publicationWaves } from './planner.mjs';
 import { runHook, sourceEnvironment } from './hooks.mjs';
 import { repositoryPath } from './config.mjs';
 import { publishCandidate, finalizeCandidate, validateCandidateBundle, verifyCandidateChecks, requireCurrentSource } from './candidate.mjs';
@@ -47,12 +47,9 @@ export function phaseMatrices(plan, remaining = Object.keys(plan.stages)) {
     entry.targets.push(target.id);
   }
   const row = component => ({ target: component.id, approval: component.approvalEnvironment ?? '' });
-  const first = component => !(component.after ?? []).some(id => active.some(value => value.id === id));
+  const waves = publicationWaves(plan);
+  const first = component => (waves.get(`${component.id}:${component.kind === 'native' ? 'handoff' : 'export'}`) ?? 1) === 1;
   const second = component => !first(component);
-  for (const component of active) for (const previous of component.after ?? []) {
-    const predecessor = active.find(value => value.id === previous);
-    invariant(!predecessor || first(predecessor), 'Supported target ordering has at most two publication waves.');
-  }
   return {
     server: active.filter(component => component.kind === 'server' && pending(component, ['build', 'publish'])).map(row),
     server_publish: active.filter(component => component.kind === 'server' && pending(component, ['publish'])).map(row),

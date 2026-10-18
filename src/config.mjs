@@ -63,7 +63,12 @@ export function validateConfig(config) {
   for (const component of config.components) {
     if (component.kind === 'ota') invariant(config.components.some(target => target.id === component.nativeTarget && target.kind === 'native' && target.platform === component.platform), `Unknown native target for ${component.id}.`);
     if (component.runtimeBinding === 'source') invariant(component.kind === 'ota' && config.components.find(value => value.id === component.nativeTarget)?.runtimePolicy === 'fingerprint', 'Source runtime binding requires fingerprint native policy.');
-    for (const id of component.after ?? []) invariant(ids.has(id) && id !== component.id, `Invalid predecessor ${id}.`);
+    for (const id of component.after ?? []) {
+      const predecessor = config.components.find(value => value.id === id);
+      invariant(predecessor && id !== component.id, `Invalid predecessor ${id}.`);
+      invariant(component.kind === 'native' ? predecessor.kind === 'native'
+        : component.kind === 'ota' && ['ota', 'server'].includes(predecessor.kind), 'Unsupported publication predecessor kind.');
+    }
   }
   for (const group of config.nativeGroups ?? []) invariant(Array.isArray(group) && group.length > 1
     && group.every(id => config.components.some(component => component.id === id && component.kind === 'native')), 'Native groups must contain configured native targets.');
@@ -73,9 +78,12 @@ export function validateConfig(config) {
     invariant(HOOKS.has(name), `Unsupported application hook ${name}.`);
     invariant(Array.isArray(hook.command) && hook.command.length > 0 && hook.command.every(value => typeof value === 'string' && value.length > 0), `Invalid ${name} hook command.`);
   }
+  const versionGroups = new Set(); const versionTargets = new Set();
   for (const group of config.versionGroups ?? []) {
     validateId(group.id);
+    invariant(!versionGroups.has(group.id), 'Duplicate version group.'); versionGroups.add(group.id);
     invariant(Array.isArray(group.targets) && group.targets.length && group.targets.every(id => ids.has(id)), 'Invalid version group targets.');
+    for (const id of group.targets) { invariant(!versionTargets.has(id), 'Each target must belong to at most one version group.'); versionTargets.add(id); }
     invariant(['global', 'independent'].includes(group.codeAllocation ?? 'independent'), 'Unsupported build code allocation.');
     invariant(['patch', 'requested'].includes(group.bump ?? 'requested'), 'Unsupported version bump policy.');
     for (const lane of Object.values(group.lanes ?? {})) invariant(Number.isSafeInteger(lane.modulus) && lane.modulus > 0

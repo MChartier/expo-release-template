@@ -59,6 +59,8 @@ Source install, inspect, validation and export run without publication credentia
 
 Deployments are policy driven: a consumer may require deployment for server changes only, or for server/OTA work. Serverless configurations have no deploy stage or dummy deployment secrets. Runtime policy remains application owned: existing `appVersion` installations are not silently relabeled as fingerprint runtimes.
 
+Local `appVersion` builds keep a fingerprint collision guard beside the external machine settings: changed native inputs require a new native version, including across worktrees. Explicitly mapped original local receipts participate only in this rejection check. This local memory is not a publication ledger, a hosted baseline, or permission to promote local evidence; GitHub Releases and verified hosted receipts retain those roles.
+
 ## Recovery
 
 ```sh
@@ -71,6 +73,8 @@ npm run release -- recover --release-id ID --abandon --reason 'A specific reason
 ```
 
 Inspection is read-only. Named mutations dispatch to the protected handler and reuse the original plan, reservations and provider IDs. Intent is durable before a request; the returned ID is durable before readback. An empty search or timeout does not prove absence. Provider retries require fresh verification of the original destination, artifact and retry eligibility. Abandonment checks cloud-build and individual-runtime operations as well as canonical stages.
+
+For a rejected Play request sent to a different track, reconciliation may include `destination: {confirmed: true, operationId, artifactSha256, from, to, reason}`. The shared adapter verifies the exact failed provider ID and archive bytes, and `to` must equal the plan's already authorized track. It appends evidence without uploading; a separate explicit retry rechecks rejection before submitting identical bytes. This cannot change a sealed plan to a new destination or bypass its approval environment. Historical readers additionally enforce their original destination contracts.
 
 Compatibility readers preserve original Little Say and Calibrate journals and producing runs. Recovery evidence has its own verified producer and cannot rewrite original successful evidence. Old missing fingerprint or exported-payload proof remains blocking; the toolkit does not synthesize it from a URL or a provider status. A completed release requires the original contract's evidence, including its deployment prerequisite. See [recovery and hook contracts](docs/adapters.md).
 
