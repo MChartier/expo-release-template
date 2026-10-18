@@ -1,0 +1,1148 @@
+{
+  "schemaVersion": 1,
+  "baseline": "2e8def677fff5e4ff486565218ed5d9afcc4498b",
+  "method": "Physical lines including blank/comment lines. Full dedicated release files and relocated builders/hooks/tooling remain in scope. Mixed CI/docs/root files are supplemental and count in net authored totals. Generated locks and vendored engine copies are separate; neither contributes to implementation reduction.",
+  "pendingRemovalCount": 84,
+  "totals": {
+    "implementationConfigurationWorkflow": {
+      "before": 18362,
+      "current": 20038,
+      "afterRemoval": 6204
+    },
+    "releaseWorkflow": {
+      "before": 5123,
+      "current": 5106,
+      "afterRemoval": 56
+    },
+    "authored": {
+      "before": 35648,
+      "current": 37138,
+      "afterRemoval": 13750
+    },
+    "generated": {
+      "before": 18986,
+      "current": 19011,
+      "afterRemoval": 12452
+    },
+    "vendored": {
+      "before": 0,
+      "current": 1187,
+      "afterRemoval": 0
+    }
+  },
+  "entries": [
+    {
+      "path": ".dockerignore",
+      "category": "supplemental",
+      "before": 14,
+      "current": 15,
+      "afterRemoval": 15
+    },
+    {
+      "path": ".github/native-play-attestation-trusted-workflow-shas",
+      "category": "configuration",
+      "before": 11,
+      "current": 11,
+      "afterRemoval": 11
+    },
+    {
+      "path": ".github/native-release-tag-allowed-signers",
+      "category": "configuration",
+      "before": 3,
+      "current": 3,
+      "afterRemoval": 3
+    },
+    {
+      "path": ".github/release-image-attestation-trusted-workflow-shas",
+      "category": "configuration",
+      "before": 8,
+      "current": 20,
+      "afterRemoval": 20
+    },
+    {
+      "path": ".github/workflows/builds.yml",
+      "category": "supplemental",
+      "before": 1086,
+      "current": 1057,
+      "afterRemoval": 1057
+    },
+    {
+      "path": ".github/workflows/container-handler.yml",
+      "category": "workflow",
+      "before": 121,
+      "current": 121,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/container-request.yml",
+      "category": "workflow",
+      "before": 81,
+      "current": 81,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/container-scan.yml",
+      "category": "supplemental",
+      "before": 146,
+      "current": 120,
+      "afterRemoval": 120
+    },
+    {
+      "path": ".github/workflows/container.yml",
+      "category": "workflow",
+      "before": 937,
+      "current": 937,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/cut-release-handler.yml",
+      "category": "workflow",
+      "before": 135,
+      "current": 135,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/cut-release-request.yml",
+      "category": "workflow",
+      "before": 78,
+      "current": 78,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/cut-release.yml",
+      "category": "workflow",
+      "before": 1271,
+      "current": 1274,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/database-upgrade.yml",
+      "category": "supplemental",
+      "before": 192,
+      "current": 166,
+      "afterRemoval": 166
+    },
+    {
+      "path": ".github/workflows/dependency-audit.yml",
+      "category": "supplemental",
+      "before": 51,
+      "current": 47,
+      "afterRemoval": 47
+    },
+    {
+      "path": ".github/workflows/deploy-self-hosted.yml",
+      "category": "workflow",
+      "before": 91,
+      "current": 91,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/expo-ota-update.yml",
+      "category": "workflow",
+      "before": 1019,
+      "current": 1055,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/lint.yml",
+      "category": "supplemental",
+      "before": 73,
+      "current": 55,
+      "afterRemoval": 55
+    },
+    {
+      "path": ".github/workflows/native-build.yml",
+      "category": "workflow",
+      "before": 236,
+      "current": 238,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/native-release.yml",
+      "category": "workflow",
+      "before": 85,
+      "current": 86,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/native-submit.yml",
+      "category": "workflow",
+      "before": 76,
+      "current": 77,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/publish-release-handler.yml",
+      "category": "workflow",
+      "before": 152,
+      "current": 152,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/publish-release-request.yml",
+      "category": "workflow",
+      "before": 113,
+      "current": 113,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/publish-release.yml",
+      "category": "workflow",
+      "before": 339,
+      "current": 339,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/recover-release.yml",
+      "category": "workflow",
+      "before": 126,
+      "current": 10,
+      "afterRemoval": 10
+    },
+    {
+      "path": ".github/workflows/release-components.yml",
+      "category": "workflow",
+      "before": 263,
+      "current": 273,
+      "afterRemoval": 0
+    },
+    {
+      "path": ".github/workflows/release-engine.yml",
+      "category": "workflow",
+      "before": 0,
+      "current": 14,
+      "afterRemoval": 14
+    },
+    {
+      "path": ".github/workflows/release-handler.yml",
+      "category": "workflow",
+      "before": 0,
+      "current": 22,
+      "afterRemoval": 22
+    },
+    {
+      "path": ".github/workflows/release-request.yml",
+      "category": "workflow",
+      "before": 0,
+      "current": 10,
+      "afterRemoval": 10
+    },
+    {
+      "path": ".github/workflows/tests.yml",
+      "category": "supplemental",
+      "before": 173,
+      "current": 147,
+      "afterRemoval": 147
+    },
+    {
+      "path": ".gitignore",
+      "category": "supplemental",
+      "before": 26,
+      "current": 27,
+      "afterRemoval": 27
+    },
+    {
+      "path": "AGENTS.md",
+      "category": "supplemental",
+      "before": 408,
+      "current": 299,
+      "afterRemoval": 299
+    },
+    {
+      "path": "deploy/README.md",
+      "category": "supplemental",
+      "before": 232,
+      "current": 231,
+      "afterRemoval": 231
+    },
+    {
+      "path": "deploy/scripts/connect-and-deploy.mjs",
+      "category": "implementation",
+      "before": 108,
+      "current": 108,
+      "afterRemoval": 0
+    },
+    {
+      "path": "deploy/self-hosted/README.md",
+      "category": "supplemental",
+      "before": 111,
+      "current": 106,
+      "afterRemoval": 106
+    },
+    {
+      "path": "deploy/test/connect-and-deploy.test.mjs",
+      "category": "test",
+      "before": 146,
+      "current": 146,
+      "afterRemoval": 0
+    },
+    {
+      "path": "deploy/test/deployment-config.test.mjs",
+      "category": "test",
+      "before": 119,
+      "current": 119,
+      "afterRemoval": 119
+    },
+    {
+      "path": "Dockerfile.app",
+      "category": "supplemental",
+      "before": 80,
+      "current": 83,
+      "afterRemoval": 83
+    },
+    {
+      "path": "docs/android-internal-testing.md",
+      "category": "documentation",
+      "before": 97,
+      "current": 95,
+      "afterRemoval": 95
+    },
+    {
+      "path": "docs/architecture/0002-canonical-release-manifest.md",
+      "category": "documentation",
+      "before": 32,
+      "current": 32,
+      "afterRemoval": 32
+    },
+    {
+      "path": "docs/architecture/0008-explicit-server-releases.md",
+      "category": "documentation",
+      "before": 82,
+      "current": 12,
+      "afterRemoval": 12
+    },
+    {
+      "path": "docs/architecture/0009-ota-server-release-compatibility.md",
+      "category": "documentation",
+      "before": 49,
+      "current": 49,
+      "afterRemoval": 49
+    },
+    {
+      "path": "docs/database-rollback-rehearsal.md",
+      "category": "supplemental",
+      "before": 82,
+      "current": 82,
+      "afterRemoval": 82
+    },
+    {
+      "path": "docs/mobile-release.md",
+      "category": "documentation",
+      "before": 280,
+      "current": 44,
+      "afterRemoval": 44
+    },
+    {
+      "path": "docs/native-store-release.md",
+      "category": "documentation",
+      "before": 79,
+      "current": 51,
+      "afterRemoval": 51
+    },
+    {
+      "path": "docs/physical-galaxy-validation.md",
+      "category": "supplemental",
+      "before": 267,
+      "current": 268,
+      "afterRemoval": 268
+    },
+    {
+      "path": "docs/play-console-health-release-checklist.md",
+      "category": "documentation",
+      "before": 372,
+      "current": 372,
+      "afterRemoval": 372
+    },
+    {
+      "path": "docs/release-acceptance.md",
+      "category": "documentation",
+      "before": 87,
+      "current": 85,
+      "afterRemoval": 85
+    },
+    {
+      "path": "docs/release-compatibility.md",
+      "category": "documentation",
+      "before": 268,
+      "current": 91,
+      "afterRemoval": 91
+    },
+    {
+      "path": "docs/release-migration-removals.md",
+      "category": "documentation",
+      "before": 0,
+      "current": 90,
+      "afterRemoval": 90
+    },
+    {
+      "path": "docs/release-migration.md",
+      "category": "documentation",
+      "before": 0,
+      "current": 0,
+      "afterRemoval": 0
+    },
+    {
+      "path": "docs/release-scope.md",
+      "category": "documentation",
+      "before": 48,
+      "current": 48,
+      "afterRemoval": 48
+    },
+    {
+      "path": "docs/releases/0.12.0-native-0.1.0-wear-0.2.0.md",
+      "category": "documentation",
+      "before": 62,
+      "current": 62,
+      "afterRemoval": 62
+    },
+    {
+      "path": "docs/releases/0.33.5-native-0.2.5-wear-0.2.5.md",
+      "category": "documentation",
+      "before": 59,
+      "current": 59,
+      "afterRemoval": 59
+    },
+    {
+      "path": "docs/releases/0.33.5-native-0.2.6-wear-0.2.6.md",
+      "category": "documentation",
+      "before": 31,
+      "current": 31,
+      "afterRemoval": 31
+    },
+    {
+      "path": "docs/releases/0.35.0-native-0.2.6-wear-0.2.6.md",
+      "category": "documentation",
+      "before": 38,
+      "current": 38,
+      "afterRemoval": 38
+    },
+    {
+      "path": "docs/security-release-threat-model.md",
+      "category": "documentation",
+      "before": 56,
+      "current": 56,
+      "afterRemoval": 56
+    },
+    {
+      "path": "docs/shared-release-engine.md",
+      "category": "documentation",
+      "before": 0,
+      "current": 7,
+      "afterRemoval": 7
+    },
+    {
+      "path": "docs/ux-regression-gates.md",
+      "category": "supplemental",
+      "before": 65,
+      "current": 65,
+      "afterRemoval": 65
+    },
+    {
+      "path": "knip.json",
+      "category": "supplemental",
+      "before": 60,
+      "current": 110,
+      "afterRemoval": 110
+    },
+    {
+      "path": "mobile/app.config.js",
+      "category": "implementation",
+      "before": 43,
+      "current": 44,
+      "afterRemoval": 44
+    },
+    {
+      "path": "mobile/app.config.test.cjs",
+      "category": "test",
+      "before": 99,
+      "current": 99,
+      "afterRemoval": 99
+    },
+    {
+      "path": "mobile/eas.json",
+      "category": "configuration",
+      "before": 34,
+      "current": 34,
+      "afterRemoval": 34
+    },
+    {
+      "path": "mobile/fingerprint.config.js",
+      "category": "implementation",
+      "before": 11,
+      "current": 11,
+      "afterRemoval": 11
+    },
+    {
+      "path": "package-lock.json",
+      "category": "generated",
+      "before": 12452,
+      "current": 12452,
+      "afterRemoval": 12452
+    },
+    {
+      "path": "package.json",
+      "category": "configuration",
+      "before": 131,
+      "current": 127,
+      "afterRemoval": 127
+    },
+    {
+      "path": "README.md",
+      "category": "supplemental",
+      "before": 285,
+      "current": 283,
+      "afterRemoval": 283
+    },
+    {
+      "path": "release-engine.lock.json",
+      "category": "generated",
+      "before": 0,
+      "current": 25,
+      "afterRemoval": 0
+    },
+    {
+      "path": "release.config.json",
+      "category": "configuration",
+      "before": 0,
+      "current": 82,
+      "afterRemoval": 82
+    },
+    {
+      "path": "scripts/expo-ota-artifact.mjs",
+      "category": "implementation",
+      "before": 584,
+      "current": 584,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/expo-ota-artifact.test.mjs",
+      "category": "test",
+      "before": 315,
+      "current": 315,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/expo-ota-publish.mjs",
+      "category": "implementation",
+      "before": 56,
+      "current": 60,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/expo-ota-store.mjs",
+      "category": "implementation",
+      "before": 133,
+      "current": 143,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/expo-runtime.mjs",
+      "category": "implementation",
+      "before": 61,
+      "current": 82,
+      "afterRemoval": 82
+    },
+    {
+      "path": "scripts/expo-runtime.test.mjs",
+      "category": "test",
+      "before": 57,
+      "current": 57,
+      "afterRemoval": 57
+    },
+    {
+      "path": "scripts/ghcr-release-policy.mjs",
+      "category": "implementation",
+      "before": 132,
+      "current": 132,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/ghcr-release-policy.test.mjs",
+      "category": "test",
+      "before": 156,
+      "current": 156,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/ghcr-release-receipt.mjs",
+      "category": "implementation",
+      "before": 403,
+      "current": 403,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/ghcr-release-receipt.test.mjs",
+      "category": "test",
+      "before": 400,
+      "current": 400,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/knip-config.test.mjs",
+      "category": "supplemental",
+      "before": 61,
+      "current": 62,
+      "afterRemoval": 62
+    },
+    {
+      "path": "scripts/native-artifact-checks.mjs",
+      "category": "implementation",
+      "before": 0,
+      "current": 214,
+      "afterRemoval": 214
+    },
+    {
+      "path": "scripts/native-config.mjs",
+      "category": "implementation",
+      "before": 217,
+      "current": 217,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-config.test.mjs",
+      "category": "test",
+      "before": 372,
+      "current": 372,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-eas-credentials.mjs",
+      "category": "implementation",
+      "before": 115,
+      "current": 115,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-eas-promote.mjs",
+      "category": "implementation",
+      "before": 91,
+      "current": 91,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-eas-submit.mjs",
+      "category": "implementation",
+      "before": 131,
+      "current": 186,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-install.mjs",
+      "category": "implementation",
+      "before": 0,
+      "current": 45,
+      "afterRemoval": 45
+    },
+    {
+      "path": "scripts/native-install.test.mjs",
+      "category": "test",
+      "before": 0,
+      "current": 44,
+      "afterRemoval": 44
+    },
+    {
+      "path": "scripts/native-internal-release.mjs",
+      "category": "implementation",
+      "before": 368,
+      "current": 368,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-internal-release.test.mjs",
+      "category": "test",
+      "before": 223,
+      "current": 223,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-ota-contract.mjs",
+      "category": "implementation",
+      "before": 259,
+      "current": 259,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-ota-contract.test.mjs",
+      "category": "test",
+      "before": 320,
+      "current": 320,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-ota-update.mjs",
+      "category": "implementation",
+      "before": 337,
+      "current": 337,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-ota-update.test.mjs",
+      "category": "test",
+      "before": 244,
+      "current": 244,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-play-receipt.mjs",
+      "category": "implementation",
+      "before": 563,
+      "current": 563,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-play-receipt.test.mjs",
+      "category": "test",
+      "before": 279,
+      "current": 279,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-play-release.mjs",
+      "category": "implementation",
+      "before": 1155,
+      "current": 1155,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-play-release.test.mjs",
+      "category": "test",
+      "before": 1316,
+      "current": 1316,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-release-artifacts.mjs",
+      "category": "implementation",
+      "before": 136,
+      "current": 157,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-release-build.mjs",
+      "category": "implementation",
+      "before": 822,
+      "current": 837,
+      "afterRemoval": 837
+    },
+    {
+      "path": "scripts/native-release-build.test.mjs",
+      "category": "test",
+      "before": 826,
+      "current": 826,
+      "afterRemoval": 826
+    },
+    {
+      "path": "scripts/native-release-devices.mjs",
+      "category": "implementation",
+      "before": 1030,
+      "current": 1030,
+      "afterRemoval": 1030
+    },
+    {
+      "path": "scripts/native-release-devices.test.mjs",
+      "category": "test",
+      "before": 551,
+      "current": 551,
+      "afterRemoval": 551
+    },
+    {
+      "path": "scripts/native-release-evidence.mjs",
+      "category": "implementation",
+      "before": 743,
+      "current": 743,
+      "afterRemoval": 743
+    },
+    {
+      "path": "scripts/native-release-evidence.test.mjs",
+      "category": "test",
+      "before": 324,
+      "current": 324,
+      "afterRemoval": 324
+    },
+    {
+      "path": "scripts/native-runtime-checks.mjs",
+      "category": "implementation",
+      "before": 0,
+      "current": 49,
+      "afterRemoval": 49
+    },
+    {
+      "path": "scripts/native-setup.mjs",
+      "category": "implementation",
+      "before": 345,
+      "current": 325,
+      "afterRemoval": 325
+    },
+    {
+      "path": "scripts/native-setup.test.mjs",
+      "category": "test",
+      "before": 309,
+      "current": 289,
+      "afterRemoval": 289
+    },
+    {
+      "path": "scripts/native-tag-attestation.mjs",
+      "category": "implementation",
+      "before": 484,
+      "current": 484,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-tag-attestation.test.mjs",
+      "category": "test",
+      "before": 496,
+      "current": 496,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native-toolchain.mjs",
+      "category": "implementation",
+      "before": 157,
+      "current": 157,
+      "afterRemoval": 157
+    },
+    {
+      "path": "scripts/native-upgrade-rehearsal.mjs",
+      "category": "implementation",
+      "before": 1058,
+      "current": 1058,
+      "afterRemoval": 1058
+    },
+    {
+      "path": "scripts/native-upgrade-rehearsal.test.mjs",
+      "category": "test",
+      "before": 592,
+      "current": 592,
+      "afterRemoval": 592
+    },
+    {
+      "path": "scripts/native.mjs",
+      "category": "implementation",
+      "before": 177,
+      "current": 177,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/native.test.mjs",
+      "category": "test",
+      "before": 150,
+      "current": 150,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-acceptance.mjs",
+      "category": "implementation",
+      "before": 324,
+      "current": 324,
+      "afterRemoval": 324
+    },
+    {
+      "path": "scripts/release-acceptance.test.mjs",
+      "category": "test",
+      "before": 130,
+      "current": 130,
+      "afterRemoval": 130
+    },
+    {
+      "path": "scripts/release-artifact-store.test.mjs",
+      "category": "test",
+      "before": 153,
+      "current": 153,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-ci-gate.mjs",
+      "category": "implementation",
+      "before": 261,
+      "current": 261,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-ci-gate.test.mjs",
+      "category": "test",
+      "before": 274,
+      "current": 274,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-config.mjs",
+      "category": "implementation",
+      "before": 1779,
+      "current": 1779,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-config.test.mjs",
+      "category": "test",
+      "before": 1755,
+      "current": 1755,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-engine.config.mjs",
+      "category": "implementation",
+      "before": 0,
+      "current": 25,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-engine.mjs",
+      "category": "implementation",
+      "before": 0,
+      "current": 219,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-engine.test.mjs",
+      "category": "test",
+      "before": 0,
+      "current": 195,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-handler-event.mjs",
+      "category": "implementation",
+      "before": 118,
+      "current": 118,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-handler-event.test.mjs",
+      "category": "test",
+      "before": 111,
+      "current": 111,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-hooks.mjs",
+      "category": "implementation",
+      "before": 0,
+      "current": 164,
+      "afterRemoval": 164
+    },
+    {
+      "path": "scripts/release-hooks.test.mjs",
+      "category": "test",
+      "before": 0,
+      "current": 70,
+      "afterRemoval": 70
+    },
+    {
+      "path": "scripts/release-inputs.mjs",
+      "category": "implementation",
+      "before": 0,
+      "current": 63,
+      "afterRemoval": 63
+    },
+    {
+      "path": "scripts/release-metadata.mjs",
+      "category": "implementation",
+      "before": 0,
+      "current": 689,
+      "afterRemoval": 689
+    },
+    {
+      "path": "scripts/release-orchestrator.mjs",
+      "category": "implementation",
+      "before": 211,
+      "current": 214,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-orchestrator.test.mjs",
+      "category": "test",
+      "before": 189,
+      "current": 218,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-reconcile.mjs",
+      "category": "implementation",
+      "before": 74,
+      "current": 105,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-reconcile.test.mjs",
+      "category": "test",
+      "before": 105,
+      "current": 205,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-record.mjs",
+      "category": "implementation",
+      "before": 188,
+      "current": 177,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-request.mjs",
+      "category": "implementation",
+      "before": 181,
+      "current": 181,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-request.test.mjs",
+      "category": "test",
+      "before": 128,
+      "current": 128,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-selection.mjs",
+      "category": "implementation",
+      "before": 148,
+      "current": 153,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/release-workflow-contract.test.mjs",
+      "category": "test",
+      "before": 1898,
+      "current": 1898,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/unified-release-workflow.test.mjs",
+      "category": "test",
+      "before": 197,
+      "current": 200,
+      "afterRemoval": 0
+    },
+    {
+      "path": "scripts/zip-entry.mjs",
+      "category": "implementation",
+      "before": 36,
+      "current": 36,
+      "afterRemoval": 36
+    },
+    {
+      "path": "tools/eas-cli/package-lock.json",
+      "category": "generated",
+      "before": 6534,
+      "current": 6534,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/eas-cli/package.json",
+      "category": "configuration",
+      "before": 13,
+      "current": 13,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/artifacts.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 93,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/core.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 105,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/graph.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 134,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/index.d.mts",
+      "category": "vendored",
+      "before": 0,
+      "current": 136,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/index.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 7,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/operation.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 136,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/package.json",
+      "category": "vendored",
+      "before": 0,
+      "current": 9,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/selection.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 62,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/test/artifacts.test.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 59,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/test/core.test.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 40,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/test/graph.test.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 62,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/test/operation.test.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 151,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/test/selection.test.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 34,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/test/versions.test.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 25,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/release-engine/versions.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 36,
+      "afterRemoval": 0
+    },
+    {
+      "path": "tools/verify-release-engine.mjs",
+      "category": "vendored",
+      "before": 0,
+      "current": 98,
+      "afterRemoval": 0
+    }
+  ]
+}

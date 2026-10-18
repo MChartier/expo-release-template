@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "repository": "MChartier/little-say",
+  "defaultBranch": "master",
+  "defaultProfile": "internal",
+  "packageDirectories": ["."],
+  "profiles": {
+    "internal": { "easProfile": "internal", "channel": "internal", "environment": "preview", "distribution": "internal", "submit": false },
+    "production": { "easProfile": "production", "channel": "production", "environment": "production", "distribution": "store", "submit": true }
+  },
+  "expo": {
+    "projectId": { "file": "native-release.json", "pointer": "/expoProjectId" },
+    "owner": { "file": "native-release.json", "pointer": "/expoOwner" },
+    "slug": "little-say",
+    "serverUrl": { "file": "native-release.json", "pointer": "/serverUrl" },
+    "environmentPolicy": {
+      "readableStringsOnly": true,
+      "allowedNames": ["LITTLE_SAY_GOOGLE_IOS_URL_SCHEME", "LITTLE_SAY_CHANNEL"],
+      "channelVariable": "LITTLE_SAY_CHANNEL",
+      "platformVariable": "LITTLE_SAY_FINGERPRINT_PLATFORM",
+      "forbiddenNames": ["EXPO_PUBLIC_*", "AAC_OPENAI_KEY", "OPENAI_API_KEY", "NODE_OPTIONS", "EXPO_NO_DOTENV", "EAS_BUILD_*", "LITTLE_SAY_OTA_VERSIONS", "LITTLE_SAY_FINGERPRINT_PLATFORM", "EAS_SKIP_AUTO_FINGERPRINT"]
+    }
+  },
+  "components": [
+    {
+      "id": "server", "kind": "server", "inputs": ["apps/server", "apps/mobile", "packages"],
+      "image": "ghcr.io/mchartier/little-say", "dockerfile": "Dockerfile", "context": ".", "platforms": ["linux/amd64", "linux/arm64"],
+      "publication": { "gitTagPrefix": "v", "movingTag": "latest" },
+      "smoke": { "port": 8787, "healthPath": "/api/ready", "timeoutSeconds": 90 },
+      "version": { "file": "release.json", "pointer": "/version" }
+    },
+    {
+      "id": "android", "kind": "native", "platform": "android", "builder": "eas", "localBuilder": "command", "appDirectory": "apps/mobile",
+      "applicationId": "net.darkmachines.littlesay", "runtimePolicy": "appVersion",
+      "signing": { "variables": { "file": "LS_KEYSTORE", "storePassword": "LS_STORE_PASSWORD", "alias": "LS_KEY_ALIAS", "keyPassword": "LS_KEY_PASSWORD" } },
+      "version": { "file": "native-release.json", "pointer": "/version", "codePointer": "/androidVersionCode" },
+      "submission": { "track": "internal", "releaseStatus": "draft" }
+    },
+    {
+      "id": "ios", "kind": "native", "platform": "ios", "builder": "eas", "localBuilder": "eas", "appDirectory": "apps/mobile",
+      "applicationId": "net.darkmachines.littlesay", "runtimePolicy": "appVersion",
+      "version": { "file": "native-release.json", "pointer": "/version", "codePointer": "/iosBuildNumber", "codeType": "string" },
+      "submission": { "ascAppId": { "file": "apps/mobile/eas.json", "pointer": "/submit/production/ios/ascAppId", "optional": true } },
+      "requiredEntitlements": { "com.apple.developer.applesignin": ["Default"] }
+    },
+    { "id": "android.ota", "kind": "ota", "platform": "android", "nativeTarget": "android", "compareEnvironment": false, "appDirectory": "apps/mobile" },
+    { "id": "ios.ota", "kind": "ota", "platform": "ios", "nativeTarget": "ios", "compareEnvironment": false, "appDirectory": "apps/mobile" }
+  ],
+  "versionGroups": [
+    {
+      "id": "server", "targets": ["server"], "bump": "requested",
+      "version": { "file": "release.json", "pointer": "/version", "mirrors": [
+        { "file": "package.json", "pointer": "/version" }, { "file": "apps/server/package.json", "pointer": "/version" },
+        { "file": "package-lock.json", "pointer": "/version" }, { "file": "package-lock.json", "pointer": "/packages//version" },
+        { "file": "package-lock.json", "pointer": "/packages/apps~1server/version" }
+      ] }
+    },
+    {
+      "id": "native", "targets": ["android", "ios"], "bump": "requested", "codeAllocation": "independent",
+      "version": { "file": "native-release.json", "pointer": "/version", "mirrors": [
+        { "file": "apps/mobile/package.json", "pointer": "/version" }, { "file": "apps/mobile/app.json", "pointer": "/expo/version" },
+        { "file": "package-lock.json", "pointer": "/packages/apps~1mobile/version" }
+      ] }
+    }
+  ],
+  "nativeGroups": [],
+  "local": { "settingsDirectory": "little-say", "settingsFile": "native.json", "legacyCredentialsField": "credentials" },
+  "dependencies": [],
+  "policy": { "otaForNewRuntime": false, "deployment": "server-or-ota", "runtimeSupportFile": "release-policy.json" },
+  "hooks": {
+    "inspect": { "command": ["node", "--import", "tsx", "scripts/release/hooks.ts"] },
+    "validate": { "command": ["node", "--import", "tsx", "scripts/release/hooks.ts"] },
+    "build": { "command": ["node", "--import", "tsx", "scripts/release/hooks.ts"] },
+    "verify": { "command": ["node", "--import", "tsx", "scripts/release/hooks.ts"] }
+  },
+  "validation": { "services": ["postgres:17-bookworm"], "environment": { "TEST_PGDATABASE": "little_say_test", "TEST_PGUSER": "little_say_test", "TEST_PGPASSWORD": "little_say_test" } },
+  "deployment": {
+    "type": "wireguard-webhook", "service": "little-say", "environment": "self-hosted-testing", "path": "/deploy/little-say",
+    "variables": { "host": "DEPLOY_HOST", "url": "DEPLOY_URL", "address": "DEPLOY_WG_ADDRESS", "publicKey": "DEPLOY_WG_PUBLIC_KEY", "endpoint": "DEPLOY_WG_ENDPOINT", "privateKey": "DEPLOY_WG_PRIVATE_KEY", "token": "DEPLOY_TOKEN" }
+  },
+  "github": { "requestWorkflow": "release-request.yml", "handlerWorkflow": "release-handler.yml", "recoveryWorkflow": "recover-release.yml" },
+  "legacy": { "format": "little-say", "prefixes": ["candidate/", "release/", "abandoned/"], "workflow": ".github/workflows/cut-release.yml" }
+}

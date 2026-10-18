@@ -1,29 +1,31 @@
-/** @file Demonstrates selection and stage ordering for a serverless Expo app with internal native distribution. */
-
-import { pathToFileURL } from 'node:url';
+/** @file Runs a third, serverless consumer through the actual shared plan and source-observation APIs, without a custom graph builder. */
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { buildReleaseGraph, selectComponents } from '../packages/release-engine/index.mjs';
+import { pathToFileURL } from 'node:url';
+import { planRelease, completedBaseline, finalizePlan } from '../src/planner.mjs';
+import { expoOnlyObservations } from './expo-only/release-hooks.mjs';
 
-/** Plan only changed native runtimes and OTA content; no backend, deployment, or store credentials are required. */
-export function planExpoOnly({ current, baseline = {} }) {
-  const components = [];
-  for (const platform of ['android', 'ios']) {
-    const runtimeChanged = current[platform].runtime !== baseline[platform]?.runtime;
-    components.push({ id: `native:${platform}`, kind: 'native', identity: current[platform].runtime, baselineIdentity: baseline[platform]?.runtime });
-    components.push({ id: `ota:${platform}`, kind: 'ota', identity: current[platform].bundle, baselineIdentity: baseline[platform]?.bundle, force: runtimeChanged, reasons: runtimeChanged ? ['new-native-runtime'] : [] });
-  }
-  const selection = selectComponents({ components });
-  const stages = [];
-  for (const platform of ['android', 'ios']) {
-    const native = selection.selected.includes(`native:${platform}`);
-    if (native) stages.push({ id: `build:${platform}`, component: `native:${platform}` });
-    if (selection.selected.includes(`ota:${platform}`)) stages.push({ id: `publish:${platform}`, component: `ota:${platform}`, needs: native ? [`build:${platform}`] : [] });
-  }
-  return { selection, graph: buildReleaseGraph(stages) };
+export const expoOnlyConfig = JSON.parse(readFileSync(new URL('./expo-only/release.config.json', import.meta.url), 'utf8'));
+
+/** Pass observed application facts to the same immutable planner used by hosted consumers. */
+export function planExpoOnly({ current, baseline = {}, source = { repository: expoOnlyConfig.repository, commit: 'a'.repeat(40), toolkitCommit: 'b'.repeat(40), origin: 'local' } }) {
+  return planRelease({ config: expoOnlyConfig, source, origin: { kind: 'local' }, observations: expoOnlyObservations(current), baseline,
+    providerConfiguration: { expo: expoOnlyConfig.expo, destinations: {} } });
+}
+
+/** Produce a synthetic completed baseline for the runnable demonstration; real callers read the shared release ledger. */
+export function demonstrationBaseline(current) {
+  const plan = planExpoOnly({ current });
+  const allocated = plan.components.find(component => component.id === 'android').next;
+  const prepared = { ...current, expoConfig: { ...current.expoConfig, version: allocated.version,
+    android: { ...current.expoConfig.android, versionCode: allocated.versionCode } } };
+  const finalized = finalizePlan(plan, plan.source, expoOnlyObservations(prepared));
+  const baseline = completedBaseline(finalized, finalized.graph.stages.map(stage => ({ stage: stage.id, status: 'complete' })));
+  return { current: prepared, baseline };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const baseline = { android: { runtime: 'android-runtime-1', bundle: 'android-js-1' }, ios: { runtime: 'ios-runtime-1', bundle: 'ios-js-1' } };
-  const current = { ...baseline, android: { runtime: 'android-runtime-1', bundle: 'android-js-2' } };
-  process.stdout.write(`${JSON.stringify(planExpoOnly({ current, baseline }), null, 2)}\n`);
+  const previous = demonstrationBaseline({ fingerprint: 'c'.repeat(40), compatibility: 'd'.repeat(40), bundle: 'bundle-1', environmentHash: 'e'.repeat(64),
+    expoConfig: { version: '1.0.0', android: { versionCode: 1, package: 'com.example.expoonly' }, extra: { eas: { projectId: expoOnlyConfig.expo.projectId } } } });
+  process.stdout.write(`${JSON.stringify(planExpoOnly({ ...previous, current: { ...previous.current, bundle: 'bundle-2' } }), null, 2)}\n`);
 }

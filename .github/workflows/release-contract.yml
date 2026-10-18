@@ -1,28 +1,26 @@
-# Runs the locked shared engine's contract tests against an exact consumer commit without publication credentials.
+# Exercise installed consumer hooks with independently pinned shared tooling and no publication credentials.
 name: Shared release contract
 on:
   workflow_call:
     inputs:
-      source_sha:
-        description: Exact consumer commit; defaults to the caller commit
-        required: false
-        type: string
-        default: ''
-permissions:
-  contents: read
+      source_sha: { type: string, default: '' }
+permissions: { contents: read }
 jobs:
-  engine:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  contract:
+    strategy:
+      fail-fast: false
+      matrix: { os: [ubuntu-latest, windows-latest] }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: ${{ inputs.source_sha || github.sha }}
-          persist-credentials: false
+        with: { ref: '${{ inputs.source_sha || github.event.pull_request.head.sha || github.sha }}', persist-credentials: false, path: .app }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '24'
-      - name: Verify the exact locked snapshot
-        run: node tools/verify-release-engine.mjs
-      - name: Verify selection, recovery, and artifact contracts
-        run: node --test tools/release-engine/test/*.test.mjs
+        with: { node-version: '24' }
+      - run: npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - run: node .toolkit/bin/check-consumer.mjs
+        env: { RELEASE_CONSUMER_PATH: .app, RELEASE_TOOLKIT_REVISION: '${{ job.workflow_sha }}' }
+      - run: npm ci --prefix .app --no-audit --no-fund
+      - run: npm run --prefix .app test:release

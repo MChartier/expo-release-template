@@ -1,0 +1,320 @@
+# Canonical request, candidate, validation and publication topology. Consumer code runs only in read-only source jobs.
+name: Handle release request
+on:
+  workflow_call:
+    secrets:
+      EXPO_TOKEN: { required: false }
+      GOOGLE_PLAY_ACCESS_TOKEN: { required: false }
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64: { required: false }
+      GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN: { required: false }
+      GOOGLE_PLAY_TEST_ACCESS_TOKEN: { required: false }
+      GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64: { required: false }
+      GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64: { required: false }
+      GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN: { required: false }
+      GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64: { required: false }
+      ANDROID_KEYSTORE_BASE64: { required: false }
+      ANDROID_STORE_PASSWORD: { required: false }
+      ANDROID_KEY_ALIAS: { required: false }
+      ANDROID_KEY_PASSWORD: { required: false }
+      CALIBRATE_ANDROID_UPLOAD_KEYSTORE_BASE64: { required: false }
+      CALIBRATE_ANDROID_SIGNING_STORE_PASSWORD: { required: false }
+      CALIBRATE_ANDROID_SIGNING_KEY_ALIAS: { required: false }
+      CALIBRATE_ANDROID_SIGNING_KEY_PASSWORD: { required: false }
+      DEPLOY_WG_ENDPOINT: { required: false }
+      DEPLOY_WG_PRIVATE_KEY: { required: false }
+      DEPLOY_TOKEN: { required: false }
+permissions: { contents: read }
+concurrency:
+  group: expo-release-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    # Draft release history requires push access; this job executes only independently pinned tooling.
+    permissions: { contents: write, actions: read }
+    outputs:
+      source: ${{ steps.authorize.outputs.source }}
+      action: ${{ steps.authorize.outputs.action }}
+      release_id: ${{ steps.authorize.outputs.release_id }}
+      state_attempt: ${{ steps.authorize.outputs.state_attempt }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: &toolkit { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: &node { node-version: '24' }
+      - run: &install npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - id: gateway
+        run: node .toolkit/bin/worker.mjs gateway
+        env: &authority
+          GITHUB_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ steps.gateway.outputs.artifact_id }}
+          run-id: ${{ steps.gateway.outputs.request_run_id }}
+          github-token: ${{ github.token }}
+          path: .release-state
+          merge-multiple: true
+      - id: authorize
+        run: node .toolkit/bin/worker.mjs authorize
+        env: *authority
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: 'release-authority-${{ github.run_attempt }}', path: .release-state, if-no-files-found: error }
+  environment:
+    needs: authorize
+    if: needs.authorize.outputs.action == 'release'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: read }
+    outputs: { state_attempt: '${{ github.run_attempt }}' }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: *toolkit
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: *node
+      - run: *install
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ needs.authorize.outputs.state_attempt }}', path: .release-state }
+      - run: node .toolkit/bin/worker.mjs environment
+        env: { GITHUB_TOKEN: '${{ github.token }}', EXPO_TOKEN: '${{ secrets.EXPO_TOKEN }}' }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: 'release-environment-${{ github.run_attempt }}', path: .release-state/environment.json, if-no-files-found: error }
+  plan:
+    needs: [authorize, environment]
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    outputs: { noop: '${{ steps.plan.outputs.noop }}', state_attempt: '${{ github.run_attempt }}' }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: *toolkit
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { ref: '${{ needs.authorize.outputs.source }}', fetch-depth: 0, persist-credentials: false, path: .app }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: *node
+      - run: *install
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ needs.authorize.outputs.state_attempt }}', path: .release-state }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-environment-${{ needs.environment.outputs.state_attempt }}', path: .release-state }
+      - run: node .toolkit/bin/worker.mjs install
+      - id: plan
+        run: node .toolkit/bin/worker.mjs plan
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-plan-${{ github.run_attempt }}
+          path: |
+            .release-state/plan.json
+            .release-state/candidate-bundle.json
+          if-no-files-found: error
+  reserve:
+    needs: [authorize, environment, plan]
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read }
+    outputs: { release_id: '${{ steps.reserve.outputs.release_id }}' }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: *toolkit
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: *node
+      - run: *install
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ needs.authorize.outputs.state_attempt }}', path: .release-state }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-environment-${{ needs.environment.outputs.state_attempt }}', path: .release-state }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-plan-${{ needs.plan.outputs.state_attempt }}', path: .release-state }
+      - id: reserve
+        run: node .toolkit/bin/worker.mjs reserve
+        env: *authority
+  candidate:
+    needs: [authorize, environment, plan, reserve]
+    if: needs.plan.outputs.noop != 'true'
+    runs-on: ubuntu-latest
+    permissions: { contents: write, pull-requests: write, actions: read }
+    outputs: { candidate: '${{ steps.candidate.outputs.candidate }}', state_attempt: '${{ github.run_attempt }}' }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: *toolkit
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: *node
+      - run: *install
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ needs.authorize.outputs.state_attempt }}', path: .release-state }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-environment-${{ needs.environment.outputs.state_attempt }}', path: .release-state }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-plan-${{ needs.plan.outputs.state_attempt }}', path: .release-state }
+      - id: candidate
+        run: node .toolkit/bin/worker.mjs candidate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          RELEASE_ID: ${{ needs.reserve.outputs.release_id }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: 'release-candidate-${{ github.run_attempt }}', path: .release-state/candidate.json, if-no-files-found: error }
+  validation:
+    name: Release validation (${{ matrix.role }})
+    needs: [authorize, environment, plan, candidate]
+    strategy: { fail-fast: false, matrix: { role: [source, candidate] } }
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions: { contents: read }
+    outputs: { state_attempt: '${{ github.run_attempt }}' }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: *toolkit
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { ref: '${{ matrix.role == ''source'' && needs.authorize.outputs.source || needs.candidate.outputs.candidate }}', fetch-depth: 0, persist-credentials: false, path: .app }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: *node
+      - run: *install
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ needs.authorize.outputs.state_attempt }}', path: .release-state }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-environment-${{ needs.environment.outputs.state_attempt }}', path: .release-state }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-plan-${{ needs.plan.outputs.state_attempt }}', path: .release-state }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-candidate-${{ needs.candidate.outputs.state_attempt }}', path: .release-state }
+      - run: node .toolkit/bin/worker.mjs install
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+      - run: sudo apt-get update -qq && sudo apt-get install -y skopeo
+      - id: validate
+        run: node .toolkit/bin/worker.mjs validate
+        env: { VALIDATION_ROLE: '${{ matrix.role }}' }
+      - if: steps.validate.outputs.image_archive != ''
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
+        with:
+          input: ${{ steps.validate.outputs.image_archive }}
+          scanners: vuln
+          vuln-type: os
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+      - if: matrix.role == 'candidate'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: 'release-prepared-${{ github.run_attempt }}', path: .release-state/prepared-plan.json, if-no-files-found: error }
+  merge:
+    needs: [authorize, environment, plan, reserve, candidate, validation]
+    runs-on: ubuntu-latest
+    permissions: { contents: write, pull-requests: write, actions: read }
+    outputs:
+      source: ${{ steps.merge.outputs.source }}
+      server: ${{ steps.merge.outputs.server }}
+      server_publish: ${{ steps.merge.outputs.server_publish }}
+      server_finalize: ${{ steps.merge.outputs.server_finalize }}
+      native_builds: ${{ steps.merge.outputs.native_builds }}
+      native_first: ${{ steps.merge.outputs.native_first }}
+      native_second: ${{ steps.merge.outputs.native_second }}
+      ota_first: ${{ steps.merge.outputs.ota_first }}
+      ota_second: ${{ steps.merge.outputs.ota_second }}
+      deployment: ${{ steps.merge.outputs.deployment }}
+      deployment_approval: ${{ steps.merge.outputs.deployment_approval }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: *toolkit
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: *node
+      - run: *install
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-authority-${{ needs.authorize.outputs.state_attempt }}', path: .release-state }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-environment-${{ needs.environment.outputs.state_attempt }}', path: .release-state }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-plan-${{ needs.plan.outputs.state_attempt }}', path: .release-state }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-candidate-${{ needs.candidate.outputs.state_attempt }}', path: .release-state }
+      - id: validated
+        run: node .toolkit/bin/worker.mjs validation-artifact
+        env: *authority
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'release-prepared-${{ steps.validated.outputs.prepared_attempt }}', path: .release-state }
+      - id: merge
+        run: node .toolkit/bin/worker.mjs merge
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          RELEASE_ID: ${{ needs.reserve.outputs.release_id }}
+  components:
+    needs: [reserve, merge]
+    permissions: { contents: write, actions: read, packages: write, id-token: write, attestations: write }
+    uses: ./.github/workflows/release-components.yml
+    with:
+      release-id: ${{ needs.reserve.outputs.release_id }}
+      matrices: ${{ toJSON(needs.merge.outputs) }}
+    secrets:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      CALIBRATE_ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.CALIBRATE_ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+      CALIBRATE_ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.CALIBRATE_ANDROID_SIGNING_STORE_PASSWORD }}
+      CALIBRATE_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.CALIBRATE_ANDROID_SIGNING_KEY_ALIAS }}
+      CALIBRATE_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.CALIBRATE_ANDROID_SIGNING_KEY_PASSWORD }}
+      DEPLOY_WG_ENDPOINT: ${{ secrets.DEPLOY_WG_ENDPOINT }}
+      DEPLOY_WG_PRIVATE_KEY: ${{ secrets.DEPLOY_WG_PRIVATE_KEY }}
+      DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+  operation:
+    needs: authorize
+    if: needs.authorize.outputs.action == 'operation'
+    permissions: { contents: write, actions: read, packages: write, attestations: read }
+    uses: ./.github/workflows/release-operation.yml
+    with:
+      state-attempt: ${{ needs.authorize.outputs.state_attempt }}
+    secrets:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      GOOGLE_PLAY_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_ACCESS_TOKEN }}
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN }}
+      GOOGLE_PLAY_TEST_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_TEST_ACCESS_TOKEN }}
+      GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN }}
+      GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64 }}
+      DEPLOY_WG_ENDPOINT: ${{ secrets.DEPLOY_WG_ENDPOINT }}
+      DEPLOY_WG_PRIVATE_KEY: ${{ secrets.DEPLOY_WG_PRIVATE_KEY }}
+      DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+  recovery:
+    needs: authorize
+    if: needs.authorize.outputs.action != 'release' && needs.authorize.outputs.action != 'operation'
+    permissions: { contents: write, pull-requests: write, actions: write, packages: write, id-token: write, attestations: write }
+    uses: ./.github/workflows/release-recovery.yml
+    with:
+      state-attempt: ${{ needs.authorize.outputs.state_attempt }}
+    secrets:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      GOOGLE_PLAY_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_ACCESS_TOKEN }}
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN }}
+      GOOGLE_PLAY_TEST_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_TEST_ACCESS_TOKEN }}
+      GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN }}
+      GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64 }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      CALIBRATE_ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.CALIBRATE_ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+      CALIBRATE_ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.CALIBRATE_ANDROID_SIGNING_STORE_PASSWORD }}
+      CALIBRATE_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.CALIBRATE_ANDROID_SIGNING_KEY_ALIAS }}
+      CALIBRATE_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.CALIBRATE_ANDROID_SIGNING_KEY_PASSWORD }}
+      DEPLOY_WG_ENDPOINT: ${{ secrets.DEPLOY_WG_ENDPOINT }}
+      DEPLOY_WG_PRIVATE_KEY: ${{ secrets.DEPLOY_WG_PRIVATE_KEY }}
+      DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+  finish:
+    needs: [reserve, plan, components]
+    if: always() && needs.reserve.result == 'success' && (needs.plan.outputs.noop == 'true' || needs.components.result != 'cancelled')
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: *toolkit
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: *node
+      - run: *install
+      - run: node .toolkit/bin/worker.mjs finish
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          RELEASE_ID: ${{ needs.reserve.outputs.release_id }}
