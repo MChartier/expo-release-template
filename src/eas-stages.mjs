@@ -145,3 +145,16 @@ export async function createEasStage({ action, plan, component, artifact, source
       dispose: () => workspace.dispose() };
   } catch (error) { workspace.dispose(); throw error; }
 }
+
+/** Create a source-free cloud observer with no enqueue capability, shared by monitoring, retry checks and recovery. */
+export async function createCloudObserver({ plan, component, transport, providerEnvironment = process.env }) {
+  const target = typeof component === 'string' ? plan.components.find(value => value.id === component) : component;
+  const composed = await createEasStage({ action: 'build', plan, component: target, transport: {} });
+  const workspace = createEasPublisherWorkspace({ ...composed.spec, expoConfig: target.observation.expoConfig },
+    { env: { ...sourceEnvironment(providerEnvironment), ...(providerEnvironment.EXPO_TOKEN ? { EXPO_TOKEN: providerEnvironment.EXPO_TOKEN } : {}) } });
+  try {
+    return { provider: { ...createEasBuildProvider(composed.spec, transport || workspace.transport),
+      /** Observation never grants a new cloud-build request, even when evidence is missing. */
+      async start() { throw new Error('Cloud observer cannot enqueue a build.'); } }, dispose: () => workspace.dispose() };
+  } catch (error) { workspace.dispose(); throw error; }
+}

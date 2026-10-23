@@ -36,10 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: &toolkit { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: &node { node-version: '24' }
-      - run: &install npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
       - id: gateway
         run: node .toolkit/bin/worker.mjs gateway
         env: &authority
@@ -67,10 +64,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: *toolkit
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
+        with: { eas: 'true' }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: { name: 'release-authority-${{ needs.authorize.outputs.state_attempt }}', path: .release-state }
       - run: node .toolkit/bin/worker.mjs environment
@@ -87,10 +82,8 @@ jobs:
         with: *toolkit
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { ref: '${{ needs.authorize.outputs.source }}', fetch-depth: 0, persist-credentials: false, path: .app }
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
+        with: { eas: 'true' }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: { name: 'release-authority-${{ needs.authorize.outputs.state_attempt }}', path: .release-state }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -107,21 +100,21 @@ jobs:
           if-no-files-found: error
   reserve:
     needs: [authorize, environment, plan]
+    if: always() && !cancelled() && needs.authorize.result == 'success' && (needs.authorize.outputs.action == 'operation' || needs.plan.result == 'success')
     runs-on: ubuntu-latest
     permissions: { contents: write, actions: read }
-    outputs: { release_id: '${{ steps.reserve.outputs.release_id }}' }
+    outputs: { release_id: '${{ steps.reserve.outputs.release_id }}', matrices: '${{ steps.reserve.outputs.matrices }}' }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: *toolkit
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: { name: 'release-authority-${{ needs.authorize.outputs.state_attempt }}', path: .release-state }
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - if: needs.authorize.outputs.action == 'release'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: { name: 'release-environment-${{ needs.environment.outputs.state_attempt }}', path: .release-state }
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - if: needs.authorize.outputs.action == 'release'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: { name: 'release-plan-${{ needs.plan.outputs.state_attempt }}', path: .release-state }
       - id: reserve
         run: node .toolkit/bin/worker.mjs reserve
@@ -135,10 +128,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: *toolkit
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: { name: 'release-authority-${{ needs.authorize.outputs.state_attempt }}', path: .release-state }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -166,10 +156,8 @@ jobs:
         with: *toolkit
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { ref: '${{ matrix.role == ''source'' && needs.authorize.outputs.source || needs.candidate.outputs.candidate }}', fetch-depth: 0, persist-credentials: false, path: .app }
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
+        with: { eas: 'true' }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: { name: 'release-authority-${{ needs.authorize.outputs.state_attempt }}', path: .release-state }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -201,23 +189,11 @@ jobs:
     permissions: { contents: write, pull-requests: write, actions: read }
     outputs:
       source: ${{ steps.merge.outputs.source }}
-      server: ${{ steps.merge.outputs.server }}
-      server_publish: ${{ steps.merge.outputs.server_publish }}
-      server_finalize: ${{ steps.merge.outputs.server_finalize }}
-      native_builds: ${{ steps.merge.outputs.native_builds }}
-      native_first: ${{ steps.merge.outputs.native_first }}
-      native_second: ${{ steps.merge.outputs.native_second }}
-      ota_first: ${{ steps.merge.outputs.ota_first }}
-      ota_second: ${{ steps.merge.outputs.ota_second }}
-      deployment: ${{ steps.merge.outputs.deployment }}
-      deployment_approval: ${{ steps.merge.outputs.deployment_approval }}
+      matrices: ${{ steps.merge.outputs.matrices }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: *toolkit
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: { name: 'release-authority-${{ needs.authorize.outputs.state_attempt }}', path: .release-state }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -238,28 +214,13 @@ jobs:
           CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
           RELEASE_ID: ${{ needs.reserve.outputs.release_id }}
   components:
-    needs: [reserve, merge]
+    needs: [authorize, reserve, merge]
+    if: always() && !cancelled() && needs.reserve.result == 'success' && (needs.authorize.outputs.action == 'operation' || needs.merge.result == 'success')
     permissions: { contents: write, actions: read, packages: write, id-token: write, attestations: write }
     uses: ./.github/workflows/release-components.yml
     with:
       release-id: ${{ needs.reserve.outputs.release_id }}
-      matrices: ${{ toJSON(needs.merge.outputs) }}
-    secrets:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
-      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      DEPLOY_WG_ENDPOINT: ${{ secrets.DEPLOY_WG_ENDPOINT }}
-      DEPLOY_WG_PRIVATE_KEY: ${{ secrets.DEPLOY_WG_PRIVATE_KEY }}
-      DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
-  operation:
-    needs: authorize
-    if: needs.authorize.outputs.action == 'operation'
-    permissions: { contents: write, actions: read, packages: write, attestations: read }
-    uses: ./.github/workflows/release-operation.yml
-    with:
-      state-attempt: ${{ needs.authorize.outputs.state_attempt }}
+      matrices: ${{ needs.reserve.outputs.matrices || needs.merge.outputs.matrices }}
     secrets:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       GOOGLE_PLAY_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_ACCESS_TOKEN }}
@@ -270,6 +231,10 @@ jobs:
       GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64 }}
       GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN }}
       GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64 }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       DEPLOY_WG_ENDPOINT: ${{ secrets.DEPLOY_WG_ENDPOINT }}
       DEPLOY_WG_PRIVATE_KEY: ${{ secrets.DEPLOY_WG_PRIVATE_KEY }}
       DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
@@ -305,10 +270,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: *toolkit
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
       - run: node .toolkit/bin/worker.mjs finish
         env:
           GITHUB_TOKEN: ${{ github.token }}

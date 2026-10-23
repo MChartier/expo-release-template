@@ -1,6 +1,25 @@
 /** @file Canonical stage readiness, durable handoff, and bounded provider observation shared by hosted workers and recovery. */
-import { invariant, hashIdentity, summarizeRelease } from '../packages/release-engine/index.mjs';
+import { invariant, hashIdentity, summarizeRelease, verifyPlan } from '../packages/release-engine/index.mjs';
 import { executeOperation, latestOperation } from './operations.mjs';
+
+/** Resolve the sealed stage, provider and approval boundary, including exact cloud/OTA observation units. */
+export function stageRoute(plan, stage) {
+  verifyPlan(plan);
+  invariant(plan.prepared && plan.origin.kind === 'github', 'Stage routing requires a prepared hosted plan.');
+  const cloud = plan.components.find(value => value.selected && value.kind === 'native' && value.builder === 'eas' && stage === `${value.id}:build-provider`);
+  const canonical = cloud ? `${cloud.id}:build` : Object.keys(plan.stages).find(id => stage === id
+    || plan.stages[id].action === 'publish' && stage.startsWith(`${id}:runtime-`));
+  const spec = plan.stages[canonical]; const component = plan.components.find(value => value.selected && value.id === spec?.target);
+  invariant(component && (cloud || ['handoff', 'submit', 'publish', 'finalize', 'deploy', 'promote'].includes(spec.action)), 'Stage does not identify a selected publication or provider operation.');
+  const runtime = !cloud && stage !== canonical ? stage.slice(`${canonical}:runtime-`.length) : undefined;
+  invariant(!runtime || component.kind === 'ota' && /^[a-f0-9]{64}$/.test(runtime), 'Invalid OTA runtime operation.');
+  const provider = spec.provider ?? (spec.action === 'deploy' ? 'deploy' : component.kind === 'server' ? 'image' : 'expo');
+  const policy = provider === 'play' ? plan.config.promotions[spec.promotion] : undefined;
+  return { stage, target: component.id, action: cloud ? 'build-provider' : spec.action, provider,
+    operationStage: spec.action === 'handoff' ? `${component.id}:submit` : stage,
+    approval: policy?.approvalEnvironment ?? (provider === 'deploy' ? plan.config.deployment.environment : component.approvalEnvironment) ?? '',
+    ...(policy ? { credentials: policy.credentials } : {}), ...(runtime ? { runtime } : {}) };
+}
 
 /** Read the immutable prepared plan and require every graph dependency before executing or observing a stage. */
 export async function stageContext(ledger, releaseId, target, action) {

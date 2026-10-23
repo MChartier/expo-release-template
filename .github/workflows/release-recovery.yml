@@ -34,9 +34,6 @@ jobs:
       retry_stage: ${{ steps.recover.outputs.retry_stage }}
       approval: ${{ steps.recover.outputs.approval }}
       provider: ${{ steps.recover.outputs.provider }}
-      target: ${{ steps.recover.outputs.target }}
-      retained: ${{ steps.recover.outputs.retained }}
-      retained_reconcile: ${{ steps.recover.outputs.retained_reconcile }}
       stage: ${{ steps.recover.outputs.stage }}
       access_token_secret: ${{ steps.recover.outputs.access_token_secret }}
       service_account_secret: ${{ steps.recover.outputs.service_account_secret }}
@@ -44,12 +41,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: &toolkit { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: &node { node-version: '24' }
-      - run: &install npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with: &authority_artifact { name: 'release-authority-${{ inputs.state-attempt }}', path: .release-state }
+        with: { name: 'release-authority-${{ inputs.state-attempt }}', path: .release-state }
       - id: recover
         run: node .toolkit/bin/worker.mjs recover
         env:
@@ -57,33 +51,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
           TOOLKIT_COMMIT: ${{ job.workflow_sha }}
-  operation:
+  reconcile:
     needs: recover
-    if: needs.recover.outputs.retained == 'true'
+    if: needs.recover.outputs.reconcile == 'true'
     permissions: { contents: write, actions: read, packages: write, attestations: read }
-    uses: ./.github/workflows/release-operation.yml
-    with:
-      state-attempt: ${{ inputs.state-attempt }}
-      release-id: ${{ needs.recover.outputs.release_id }}
-      retry-stage: ${{ needs.recover.outputs.retry_stage }}
-    secrets:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      GOOGLE_PLAY_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_ACCESS_TOKEN }}
-      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 }}
-      GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN }}
-      GOOGLE_PLAY_TEST_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_TEST_ACCESS_TOKEN }}
-      GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64 }}
-      GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64 }}
-      GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN }}
-      GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64 }}
-      DEPLOY_WG_ENDPOINT: ${{ secrets.DEPLOY_WG_ENDPOINT }}
-      DEPLOY_WG_PRIVATE_KEY: ${{ secrets.DEPLOY_WG_PRIVATE_KEY }}
-      DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
-  reconcile-operation:
-    needs: recover
-    if: needs.recover.outputs.retained_reconcile == 'true'
-    permissions: { contents: write, actions: read, packages: write, attestations: read }
-    uses: ./.github/workflows/release-operation-stage.yml
+    uses: ./.github/workflows/release-stage.yml
     with:
       state-attempt: ${{ inputs.state-attempt }}
       release-id: ${{ needs.recover.outputs.release_id }}
@@ -117,89 +89,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ORIGINAL_RUN: ${{ needs.recover.outputs.rerun_run_id }}
-  observe:
-    needs: recover
-    if: needs.recover.outputs.reconcile == 'true' && needs.recover.outputs.approval == '' && needs.recover.outputs.provider == 'expo'
-    runs-on: ubuntu-latest
-    permissions: &observer_permissions { contents: write, actions: read, attestations: read }
-    steps: &observe_steps
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with: *toolkit
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with: *authority_artifact
-      - run: node .toolkit/bin/worker.mjs reconcile
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          GH_TOKEN: ${{ github.token }}
-          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
-          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-  approved-observe:
-    needs: recover
-    if: needs.recover.outputs.reconcile == 'true' && needs.recover.outputs.approval != '' && needs.recover.outputs.provider == 'expo'
-    runs-on: ubuntu-latest
-    environment: ${{ needs.recover.outputs.approval }}
-    permissions: *observer_permissions
-    steps: *observe_steps
-  observe-image:
-    needs: recover
-    if: needs.recover.outputs.reconcile == 'true' && needs.recover.outputs.provider == 'image' && needs.recover.outputs.approval == ''
-    runs-on: ubuntu-latest
-    permissions: { contents: write, actions: read, attestations: read, packages: read }
-    steps: &observe_image_steps
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with: *toolkit
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with: *authority_artifact
-      - run: node .toolkit/bin/worker.mjs reconcile
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          GH_TOKEN: ${{ github.token }}
-          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
-          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
-          GHCR_TOKEN: ${{ github.token }}
-  approved-observe-image:
-    needs: recover
-    if: needs.recover.outputs.reconcile == 'true' && needs.recover.outputs.provider == 'image' && needs.recover.outputs.approval != ''
-    runs-on: ubuntu-latest
-    environment: ${{ needs.recover.outputs.approval }}
-    permissions: { contents: write, actions: read, attestations: read, packages: read }
-    steps: *observe_image_steps
-  observe-deploy:
-    needs: recover
-    if: needs.recover.outputs.reconcile == 'true' && needs.recover.outputs.provider == 'deploy' && needs.recover.outputs.approval == ''
-    runs-on: ubuntu-latest
-    permissions: { contents: write, actions: read }
-    steps: &observe_deploy_steps
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with: *toolkit
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with: *authority_artifact
-      - run: node .toolkit/bin/worker.mjs reconcile
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          GH_TOKEN: ${{ github.token }}
-          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
-          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
-  approved-observe-deploy:
-    needs: recover
-    if: needs.recover.outputs.reconcile == 'true' && needs.recover.outputs.provider == 'deploy' && needs.recover.outputs.approval != ''
-    runs-on: ubuntu-latest
-    environment: ${{ needs.recover.outputs.approval }}
-    permissions: { contents: write, actions: read }
-    steps: *observe_deploy_steps
   components:
     needs: recover
     if: needs.recover.outputs.execute == 'true'
@@ -211,6 +100,14 @@ jobs:
       retry-stage: ${{ needs.recover.outputs.retry_stage }}
     secrets:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      GOOGLE_PLAY_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_ACCESS_TOKEN }}
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN }}
+      GOOGLE_PLAY_TEST_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_TEST_ACCESS_TOKEN }}
+      GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN }}
+      GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64 }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -226,10 +123,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: *toolkit
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
       - run: node .toolkit/bin/worker.mjs finish
         env:
           GITHUB_TOKEN: ${{ github.token }}

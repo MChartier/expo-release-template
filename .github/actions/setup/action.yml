@@ -1,0 +1,17 @@
+# Install independently checked-out toolkit dependencies before any credential-bearing step.
+name: Set up release toolkit
+description: Shared credential-free Node and locked upstream toolchain installation
+inputs:
+  eas:
+    description: Install the official EAS toolchain in its external cache
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with: { node-version: '24' }
+    - shell: bash
+      run: npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+    - if: inputs.eas == 'true'
+      shell: bash
+      run: node .toolkit/bin/expo-release.mjs setup

@@ -1,22 +1,7 @@
-/** @file Plans and executes protected standalone submission, deployment and promotion against original retained evidence without source checkout or baseline reassignment. */
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+/** @file Prepare retained-artifact plans and revalidate their original evidence; execution uses the ordinary stage executor. */
 import { buildReleaseGraph, createPlan, hashIdentity, invariant, verifyPlan } from '../packages/release-engine/index.mjs';
 import { configuredComponents } from './planner.mjs';
 import { validatePromotions } from './promotion-config.mjs';
-import { restoreArtifact } from './retention.mjs';
-import { verifyRetainedArtifact } from './artifacts.mjs';
-import { verifyProducer } from './github.mjs';
-import { verifyReceiptAttestation } from './attestation.mjs';
-import { createEasStage } from './eas-stages.mjs';
-import { latestOperation } from './operations.mjs';
-import { runProviderStage, stageContext } from './stages.mjs';
-import { finalizeServer } from './server-release.mjs';
-import { createGhcrTransport } from './providers/ghcr.mjs';
-import { createDeploymentProvider } from './providers/deploy.mjs';
-import { createPlayCohortPromotionProvider } from './providers/play-cohort.mjs';
-import { createGooglePlayPublisher, resolveGooglePlayAccessToken } from './providers/play-transport.mjs';
 
 const same = (left, right) => hashIdentity(left) === hashIdentity(right);
 
@@ -116,108 +101,10 @@ export function prepareRetainedOperation({ state, request, config, source, origi
     providerConfiguration: state.plan?.providerConfiguration || {}, retainedOperation: request });
 }
 
-/** Route one prepared retained stage to fixed provider capabilities and the current configuration's approval policy. */
-export function routeRetainedOperation(plan, stage) {
-  verifyPlan(plan); const value = plan.stages[stage]; const component = plan.components.find(item => item.id === value?.target);
-  invariant(plan.prepared && plan.retainedOperation && plan.origin.kind === 'github' && value && component
-    && ['expo', 'play', 'image', 'deploy'].includes(value.provider), 'Expected one prepared hosted retained-operation stage.');
-  if (value.provider === 'play') {
-    const policy = plan.config.promotions[value.promotion];
-    return { stage, provider: 'play', approval: policy.approvalEnvironment, credentials: policy.credentials };
-  }
-  return { stage, provider: value.provider, approval: value.provider === 'deploy' ? plan.config.deployment.environment || '' : component.approvalEnvironment || '' };
-}
-
-/** Resolve only the credentials named by this promotion stage; generic or other-stage secrets are never fallback authority. */
-export async function resolvePromotionToken(credentials, environment, resolveToken = resolveGooglePlayAccessToken) {
-  const token = credentials.accessToken && environment[credentials.accessToken];
-  if (token) return resolveToken({ environment: { GOOGLE_PLAY_ACCESS_TOKEN: token } });
-  const encoded = credentials.serviceAccountBase64 && environment[credentials.serviceAccountBase64];
-  invariant(typeof encoded === 'string' && /^[A-Za-z0-9+/]+={0,2}$/.test(encoded), 'The selected promotion stage has no credentials.');
-  let value; try { value = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8')); } catch { throw new Error('The selected promotion service account is invalid.'); }
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'expo-play-key-'));
-  try { const file = path.join(directory, 'key.json'); fs.writeFileSync(file, JSON.stringify(value), { mode: 0o600 }); return await resolveToken({ serviceAccountFile: file, environment: {} }); }
-  finally { invariant(path.dirname(path.resolve(directory)) === path.resolve(os.tmpdir()), 'Credential cleanup escaped the temporary directory.'); fs.rmSync(directory, { recursive: true, force: true }); }
-}
-
-/** Restore original receipt/attestation bytes into a fresh inert directory; the new operation never becomes their producer. */
-export async function restoreRetainedOperationArtifact({ ledger, state, target, directory, verifyAttestation = verifyReceiptAttestation }) {
-  return restoreArtifact({ ledger, releaseId: state.release.id, target, directory, verify: (receipt, folder, file) =>
-    verifyRetainedArtifact({ plan: state.plan, target, directory: folder, receipt,
-      verifyProducer: async value => Boolean(await verifyProducer(ledger.api, ledger.config, value.producer.origin, value.producer.workflowCommit)),
-      verifyAttestation: value => verifyAttestation({ api: ledger.api, config: ledger.config, receipt: value, file }) }) });
-}
-
-async function originalForOperation(ledger, plan) {
+/** Revalidate the original release and current retained-operation authorization before restoring any input. */
+export async function retainedSource(ledger, plan) {
   const request = plan.retainedOperation; const original = await ledger.read(request.releaseId);
   invariant(same(retainedOperationRequest({ state: original, config: plan.config, operation: request.operation, targets: request.targets, promotion: request.promotion }), request),
     'Original retained evidence or permission changed before execution.');
   return original;
-}
-
-/** Compose a source-free observer/publisher from original ledger artifacts; construction never starts a provider operation. */
-export async function retainedOperationProvider({ ledger, state, stage, directory, environment = process.env,
-  restore = restoreRetainedOperationArtifact, easTransport, deploy, token = resolvePromotionToken, publisherFactory = createGooglePlayPublisher }) {
-  const plan = state.plan; const route = routeRetainedOperation(plan, stage); const spec = plan.stages[stage]; const request = plan.retainedOperation;
-  invariant(route.provider !== 'image', 'Image finalization resumes through protected tag/alias readback; it has no replaceable provider operation ID.');
-  const original = await originalForOperation(ledger, plan);
-  let workspace;
-  const artifacts = new Map();
-  const load = async target => {
-    if (!artifacts.has(target)) artifacts.set(target, await restore({ ledger, state: original, target, directory: path.join(directory, target) }));
-    return artifacts.get(target);
-  };
-  try {
-    let provider;
-    if (route.provider === 'deploy') provider = createDeploymentProvider(plan.config.deployment, { environment, ...(deploy ? { transport: deploy } : {}) });
-    else if (route.provider === 'expo') {
-      const artifact = await load(spec.target);
-      workspace = await createEasStage({ action: 'submit', plan: original.plan, component: spec.target, artifact, sourceProof: artifact.sourceProof,
-        transport: easTransport, providerEnvironment: environment, operation: latestOperation(state.events, stage) }); provider = workspace.provider;
-    } else {
-      const policy = plan.config.promotions[spec.promotion]; const targets = [];
-      for (const target of spec.targets) {
-        completedSubmission(original, target, request.original);
-        const artifact = await load(target); const component = plan.components.find(value => value.id === target); const tracks = policy.tracks[target];
-        const files = artifact.receipt?.manifest.files.filter(value => value.path.endsWith('.aab'));
-        invariant(artifact.file || files?.length === 1, 'Promotion needs one original AAB per target.');
-        if (artifact.receipt) invariant(artifact.receipt.metadata.kind === 'native'
-          && Number(artifact.receipt.metadata.native?.versionCode ?? artifact.receipt.metadata.versionCode) === component.observation.versionCode,
-        'Promotion version differs from original native artifact metadata.');
-        const marker = `${tracks.sourceMarkerPrefix || `expo-${target}`}@${request.original.source}`;
-        targets.push({ target, applicationId: spec.applicationId, sourceTrack: tracks.source, destination: tracks.destination,
-          versionCode: component.observation.versionCode, sha256: artifact.sha256 || files[0].sha256, marker,
-          ...(tracks.sourceMarkerPrefix ? { sourceMarker: marker } : {}), sourceProof: artifact.sourceProof });
-      }
-      const accessToken = await token(policy.credentials, environment);
-      provider = createPlayCohortPromotionProvider({ applicationId: spec.applicationId, source: plan.source.commit, repository: plan.source.repository, targets },
-        publisherFactory({ applicationId: spec.applicationId, accessToken }));
-    }
-    return { route, provider,
-      /** Dispose data-only publisher configuration; the caller owns restored retained files. */
-      dispose() { workspace?.dispose(); } };
-  } catch (error) { workspace?.dispose(); throw error; }
-}
-
-/** Execute or observe one protected operation using retained bytes only; the caller owns the fresh output directory. */
-export async function executeRetainedOperation({ ledger, releaseId, stage, directory, environment = process.env, retry = false, wait = true,
-  restore = restoreRetainedOperationArtifact, easTransport, registry, deploy, token = resolvePromotionToken, publisherFactory = createGooglePlayPublisher }) {
-  const initial = await ledger.read(releaseId); const route = routeRetainedOperation(initial.plan, stage); const spec = initial.plan.stages[stage];
-  const context = await stageContext(ledger, releaseId, spec.target, spec.action); const plan = context.plan;
-  if (context.complete) return { route, complete: true };
-  if (route.provider === 'image') {
-    const original = await originalForOperation(ledger, plan);
-    const artifact = await restore({ ledger, state: original, target: spec.target, directory: path.join(directory, spec.target) });
-    const component = plan.components.find(value => value.id === spec.target);
-    const transport = registry || createGhcrTransport({ image: component.image, username: environment.GITHUB_ACTOR, token: environment.GHCR_TOKEN });
-    await finalizeServer({ ledger, releaseId, target: spec.target, api: ledger.api,
-      artifact: { ...artifact, file: path.join(artifact.directory, 'image.oci.tar') }, transport });
-    return { route, complete: true };
-  }
-  const built = await retainedOperationProvider({ ledger, state: initial, stage, directory, environment, restore, easTransport, deploy, token, publisherFactory });
-  try {
-    const operation = await runProviderStage({ ledger, releaseId, target: spec.target, action: spec.action, provider: built.provider, retry, wait,
-      request: { retainedReleaseId: plan.retainedOperation.releaseId, retainedPlanDigest: plan.retainedOperation.planDigest } });
-    return { route, complete: operation.status === 'complete', operation };
-  } finally { built.dispose(); }
 }

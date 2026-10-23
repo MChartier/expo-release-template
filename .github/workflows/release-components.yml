@@ -8,6 +8,14 @@ on:
       retry-stage: { type: string, default: '' }
     secrets:
       EXPO_TOKEN: { required: false }
+      GOOGLE_PLAY_ACCESS_TOKEN: { required: false }
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64: { required: false }
+      GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN: { required: false }
+      GOOGLE_PLAY_TEST_ACCESS_TOKEN: { required: false }
+      GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64: { required: false }
+      GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64: { required: false }
+      GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN: { required: false }
+      GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64: { required: false }
       ANDROID_KEYSTORE_BASE64: { required: false }
       ANDROID_STORE_PASSWORD: { required: false }
       ANDROID_KEY_ALIAS: { required: false }
@@ -18,8 +26,8 @@ on:
 permissions: { contents: read }
 jobs:
   server-build:
-    if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).server != '[]' }}
-    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).server) }}' } }
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).server) != '[]' }}
+    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(inputs.matrices).server }}' } }
     permissions: { contents: write, actions: read, id-token: write, attestations: write }
     uses: ./.github/workflows/release-artifact.yml
     with:
@@ -28,30 +36,30 @@ jobs:
       action: build
   server-publish:
     needs: [server-build]
-    if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).server_publish != '[]' }}
-    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).server_publish) }}' } }
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).server_publish) != '[]' }}
+    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(inputs.matrices).server_publish }}' } }
     permissions: { contents: write, actions: read, packages: write, attestations: read }
-    uses: ./.github/workflows/release-image.yml
+    uses: ./.github/workflows/release-stage.yml
     with:
       release-id: ${{ inputs.release-id }}
-      target: ${{ matrix.target.target }}
-      action: publish
+      stage: ${{ matrix.target.target }}:publish
+      provider: image
       approval: ${{ matrix.target.approval }}
       retry-stage: ${{ inputs.retry-stage }}
   server-finalize:
     needs: server-publish
-    if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).server_finalize != '[]' }}
-    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).server_finalize) }}' } }
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).server_finalize) != '[]' }}
+    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(inputs.matrices).server_finalize }}' } }
     permissions: { contents: write, actions: read, packages: write, attestations: read }
-    uses: ./.github/workflows/release-image.yml
+    uses: ./.github/workflows/release-stage.yml
     with:
       release-id: ${{ inputs.release-id }}
-      target: ${{ matrix.target.target }}
-      action: finalize
+      stage: ${{ matrix.target.target }}:finalize
+      provider: image
       approval: ${{ matrix.target.approval }}
   native-build:
-    if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).native_builds != '[]' }}
-    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).native_builds) }}' } }
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).native_builds) != '[]' }}
+    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(inputs.matrices).native_builds }}' } }
     permissions: { contents: write, actions: read, id-token: write, attestations: write }
     uses: ./.github/workflows/release-artifact.yml
     with:
@@ -69,11 +77,12 @@ jobs:
   deployment:
     needs: [server-publish, server-finalize]
     if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).deployment != '' }}
-    permissions: { contents: write, actions: read }
-    uses: ./.github/workflows/release-deploy.yml
+    permissions: { contents: write, actions: read, packages: write, attestations: read }
+    uses: ./.github/workflows/release-stage.yml
     with:
       release-id: ${{ inputs.release-id }}
-      target: ${{ fromJSON(inputs.matrices).deployment }}
+      stage: ${{ fromJSON(inputs.matrices).deployment }}:deploy
+      provider: deploy
       approval: ${{ fromJSON(inputs.matrices).deployment_approval }}
       retry-stage: ${{ inputs.retry-stage }}
     secrets:
@@ -82,64 +91,64 @@ jobs:
       DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
   native-first-handoff:
     needs: [native-build, deployment]
-    if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).native_first != '[]' }}
-    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).native_first) }}' } }
-    permissions: { contents: write, actions: read, attestations: read }
-    uses: ./.github/workflows/release-publish.yml
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).native_first) != '[]' }}
+    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(inputs.matrices).native_first }}' } }
+    permissions: { contents: write, actions: read, packages: write, attestations: read }
+    uses: ./.github/workflows/release-stage.yml
     with:
       release-id: ${{ inputs.release-id }}
-      target: ${{ matrix.target.target }}
-      action: handoff
+      stage: ${{ matrix.target.target }}:handoff
+      provider: expo
       approval: ${{ matrix.target.approval }}
       retry-stage: ${{ inputs.retry-stage }}
     secrets:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
   native-first-submit:
     needs: [native-first-handoff]
-    if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).native_first != '[]' }}
-    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).native_first) }}' } }
-    permissions: { contents: write, actions: read, attestations: read }
-    uses: ./.github/workflows/release-publish.yml
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).native_first) != '[]' }}
+    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(inputs.matrices).native_first }}' } }
+    permissions: { contents: write, actions: read, packages: write, attestations: read }
+    uses: ./.github/workflows/release-stage.yml
     with:
       release-id: ${{ inputs.release-id }}
-      target: ${{ matrix.target.target }}
-      action: submit
+      stage: ${{ matrix.target.target }}:submit
+      provider: expo
       approval: ${{ matrix.target.approval }}
       retry-stage: ${{ inputs.retry-stage }}
     secrets:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
   native-second-handoff:
     needs: [native-build, deployment, native-first-submit]
-    if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).native_second != '[]' }}
-    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).native_second) }}' } }
-    permissions: { contents: write, actions: read, attestations: read }
-    uses: ./.github/workflows/release-publish.yml
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).native_second) != '[]' }}
+    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(inputs.matrices).native_second }}' } }
+    permissions: { contents: write, actions: read, packages: write, attestations: read }
+    uses: ./.github/workflows/release-stage.yml
     with:
       release-id: ${{ inputs.release-id }}
-      target: ${{ matrix.target.target }}
-      action: handoff
+      stage: ${{ matrix.target.target }}:handoff
+      provider: expo
       approval: ${{ matrix.target.approval }}
       retry-stage: ${{ inputs.retry-stage }}
     secrets:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
   native-second-submit:
     needs: [native-second-handoff]
-    if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).native_second != '[]' }}
-    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).native_second) }}' } }
-    permissions: { contents: write, actions: read, attestations: read }
-    uses: ./.github/workflows/release-publish.yml
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).native_second) != '[]' }}
+    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(inputs.matrices).native_second }}' } }
+    permissions: { contents: write, actions: read, packages: write, attestations: read }
+    uses: ./.github/workflows/release-stage.yml
     with:
       release-id: ${{ inputs.release-id }}
-      target: ${{ matrix.target.target }}
-      action: submit
+      stage: ${{ matrix.target.target }}:submit
+      provider: expo
       approval: ${{ matrix.target.approval }}
       retry-stage: ${{ inputs.retry-stage }}
     secrets:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
   ota-first-export:
     needs: [deployment, native-build, native-first-handoff]
-    if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).ota_first != '[]' }}
-    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).ota_first) }}' } }
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).ota_first) != '[]' }}
+    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(inputs.matrices).ota_first }}' } }
     permissions: { contents: write, actions: read, id-token: write, attestations: write }
     uses: ./.github/workflows/release-artifact.yml
     with:
@@ -151,22 +160,22 @@ jobs:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
   ota-first-publish:
     needs: [ota-first-export]
-    if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).ota_first != '[]' }}
-    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).ota_first) }}' } }
-    permissions: { contents: write, actions: read, attestations: read }
-    uses: ./.github/workflows/release-publish.yml
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).ota_first) != '[]' }}
+    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(inputs.matrices).ota_first }}' } }
+    permissions: { contents: write, actions: read, packages: write, attestations: read }
+    uses: ./.github/workflows/release-stage.yml
     with:
       release-id: ${{ inputs.release-id }}
-      target: ${{ matrix.target.target }}
-      action: publish
+      stage: ${{ matrix.target.target }}:publish
+      provider: expo
       approval: ${{ matrix.target.approval }}
       retry-stage: ${{ inputs.retry-stage }}
     secrets:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
   ota-second-export:
     needs: [deployment, native-build, ota-first-publish, native-second-handoff]
-    if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).ota_second != '[]' }}
-    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).ota_second) }}' } }
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).ota_second) != '[]' }}
+    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(inputs.matrices).ota_second }}' } }
     permissions: { contents: write, actions: read, id-token: write, attestations: write }
     uses: ./.github/workflows/release-artifact.yml
     with:
@@ -178,15 +187,72 @@ jobs:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
   ota-second-publish:
     needs: [ota-second-export]
-    if: ${{ always() && !cancelled() && fromJSON(inputs.matrices).ota_second != '[]' }}
-    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(fromJSON(inputs.matrices).ota_second) }}' } }
-    permissions: { contents: write, actions: read, attestations: read }
-    uses: ./.github/workflows/release-publish.yml
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).ota_second) != '[]' }}
+    strategy: { fail-fast: false, matrix: { target: '${{ fromJSON(inputs.matrices).ota_second }}' } }
+    permissions: { contents: write, actions: read, packages: write, attestations: read }
+    uses: ./.github/workflows/release-stage.yml
     with:
       release-id: ${{ inputs.release-id }}
-      target: ${{ matrix.target.target }}
-      action: publish
+      stage: ${{ matrix.target.target }}:publish
+      provider: expo
       approval: ${{ matrix.target.approval }}
       retry-stage: ${{ inputs.retry-stage }}
     secrets:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+  operations-first:
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).operations_first) != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix: { include: '${{ fromJSON(inputs.matrices).operations_first }}' }
+    permissions: { contents: write, actions: read, attestations: read, packages: write }
+    uses: ./.github/workflows/release-stage.yml
+    with:
+      release-id: ${{ inputs.release-id }}
+      stage: ${{ matrix.stage }}
+      provider: ${{ matrix.provider }}
+      approval: ${{ matrix.approval }}
+      access-token-secret: ${{ matrix.access_token_secret }}
+      service-account-secret: ${{ matrix.service_account_secret }}
+      retry-stage: ${{ inputs.retry-stage }}
+    secrets:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      GOOGLE_PLAY_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_ACCESS_TOKEN }}
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN }}
+      GOOGLE_PLAY_TEST_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_TEST_ACCESS_TOKEN }}
+      GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN }}
+      GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64 }}
+      DEPLOY_WG_ENDPOINT: ${{ secrets.DEPLOY_WG_ENDPOINT }}
+      DEPLOY_WG_PRIVATE_KEY: ${{ secrets.DEPLOY_WG_PRIVATE_KEY }}
+      DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+  operations-second:
+    needs: operations-first
+    if: ${{ always() && !cancelled() && toJSON(fromJSON(inputs.matrices).operations_second) != '[]' }}
+    strategy:
+      fail-fast: false
+      matrix: { include: '${{ fromJSON(inputs.matrices).operations_second }}' }
+    permissions: { contents: write, actions: read, attestations: read, packages: write }
+    uses: ./.github/workflows/release-stage.yml
+    with:
+      release-id: ${{ inputs.release-id }}
+      stage: ${{ matrix.stage }}
+      provider: ${{ matrix.provider }}
+      approval: ${{ matrix.approval }}
+      access-token-secret: ${{ matrix.access_token_secret }}
+      service-account-secret: ${{ matrix.service_account_secret }}
+      retry-stage: ${{ inputs.retry-stage }}
+    secrets:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      GOOGLE_PLAY_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_ACCESS_TOKEN }}
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN }}
+      GOOGLE_PLAY_TEST_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_TEST_ACCESS_TOKEN }}
+      GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_TEST_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_INTERNAL_SERVICE_ACCOUNT_JSON_BASE64 }}
+      GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN: ${{ secrets.GOOGLE_PLAY_PRODUCTION_ACCESS_TOKEN }}
+      GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.GOOGLE_PLAY_PRODUCTION_SERVICE_ACCOUNT_JSON_BASE64 }}
+      DEPLOY_WG_ENDPOINT: ${{ secrets.DEPLOY_WG_ENDPOINT }}
+      DEPLOY_WG_PRIVATE_KEY: ${{ secrets.DEPLOY_WG_PRIVATE_KEY }}
+      DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}

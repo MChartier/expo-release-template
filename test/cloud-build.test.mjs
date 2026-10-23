@@ -11,6 +11,7 @@ import { reduceOperation } from '../packages/release-engine/index.mjs';
 import { planRelease } from '../src/planner.mjs';
 import { beginCloudBuild, enqueueCloudBuild, monitorCloudBuild } from '../src/cloud-build.mjs';
 import { latestOperation } from '../src/operations.mjs';
+import { createStageProvider } from '../src/execution.mjs';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const projectId = '22222222-2222-4222-8222-222222222222';
@@ -65,6 +66,17 @@ test('fresh intent grants one lease and enqueue persists raw ID without readback
   assert.equal(accepted.id, id); assert.equal(calls.enqueue, 1); assert.equal(calls.read, 0);
   assert.deepEqual(JSON.parse(fs.readFileSync(args.handoffFile)), accepted);
   await assert.rejects(enqueueCloudBuild({ ...args, lease: begun.lease }), /EEXIST/); assert.equal(calls.enqueue, 1);
+});
+
+test('recovery constructs the same cloud observer without granting enqueue capability', async t => {
+  const { args, calls, directory } = fixture(t);
+  const observed = await createStageProvider({ ledger: args.ledger, state: await args.ledger.read(),
+    stage: 'android:build-provider', directory, easTransport: args.transport, environment: {} });
+  try {
+    await assert.rejects(observed.provider.start(), /cannot enqueue/);
+    assert.equal((await observed.provider.status(id)).status, 'complete');
+    assert.equal(calls.enqueue, 0); assert.equal(calls.read, 1);
+  } finally { observed.dispose(); }
 });
 
 test('explicit failed-build replacement preserves prior IDs and uses a new producing lease', async t => {

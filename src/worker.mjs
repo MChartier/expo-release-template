@@ -13,10 +13,11 @@ import { runHook, sourceEnvironment } from './hooks.mjs';
 import { repositoryPath } from './config.mjs';
 import { publishCandidate, finalizeCandidate, validateCandidateBundle, verifyCandidateChecks, requireCurrentSource } from './candidate.mjs';
 import { recoverRelease } from './recovery.mjs';
-import { recoveryProvider, recoveryTarget } from './recovery-providers.mjs';
+import { createStageProvider, executeStage } from './execution.mjs';
+import { stageRoute } from './stages.mjs';
 import { buildServer } from './build.mjs';
 import { smokeImage } from './image-smoke.mjs';
-import { prepareRetainedOperation, routeRetainedOperation, executeRetainedOperation } from './retained-operations.mjs';
+import { prepareRetainedOperation } from './retained-operations.mjs';
 
 /** Export single-line JSON/scalars without evaluating any source-provided shell syntax. */
 export function workflowOutputs(values, environment = process.env) {
@@ -31,7 +32,7 @@ export function workflowOutputs(values, environment = process.env) {
 /** Derive fixed supported phase matrices from the canonical plan; callers cannot provide a second graph. */
 export function phaseMatrices(plan, remaining = Object.keys(plan.stages)) {
   verifyPlan(plan);
-  const active = plan.components.filter(component => component.selected);
+  const active = plan.retainedOperation ? [] : plan.components.filter(component => component.selected);
   const natives = active.filter(component => component.kind === 'native');
   const pending = (component, actions) => actions.some(action => remaining.includes(`${component.id}:${action}`));
   const groups = new Map();
@@ -54,22 +55,27 @@ export function phaseMatrices(plan, remaining = Object.keys(plan.stages)) {
     native_second: natives.filter(second).filter(component => component.submit !== false && pending(component, ['handoff', 'submit'])).map(row),
     ota_first: active.filter(component => component.kind === 'ota' && first(component) && pending(component, ['export', 'publish'])).map(row),
     ota_second: active.filter(component => component.kind === 'ota' && second(component) && pending(component, ['export', 'publish'])).map(row),
-    deployment: Object.entries(plan.stages).find(([id, spec]) => spec.action === 'deploy' && remaining.includes(id))?.[1].target ?? '',
-    deployment_approval: plan.config.deployment?.environment ?? ''
+    deployment: !plan.retainedOperation && Object.entries(plan.stages).find(([id, spec]) => spec.action === 'deploy' && remaining.includes(id))?.[1].target || '',
+    deployment_approval: plan.config.deployment?.environment ?? '',
+    ...operationMatrices(plan, remaining)
   };
 }
 
 /** Retained operations use two fixed submission waves or independent provider stages, never a consumer-supplied workflow graph. */
-export function operationMatrices(plan, remaining = Object.keys(plan.stages)) {
-  verifyPlan(plan);
-  const row = stage => {
-    const route = routeRetainedOperation(plan, stage.id);
-    return { ...route, access_token_secret: route.credentials?.accessToken ?? '', service_account_secret: route.credentials?.serviceAccountBase64 ?? '' };
-  };
+function operationMatrices(plan, remaining) {
+  if (!plan.retainedOperation) return { operations_first: [], operations_second: [] };
   const first = plan.graph.stages.filter(stage => stage.needs.length === 0);
   const second = plan.graph.stages.filter(stage => stage.needs.length > 0);
   invariant(second.every(stage => stage.needs.every(id => first.some(value => value.id === id))), 'Retained submissions support at most two configured waves.');
-  return { first: first.filter(stage => remaining.includes(stage.id)).map(row), second: second.filter(stage => remaining.includes(stage.id)).map(row) };
+  const rows = stages => stages.filter(stage => remaining.includes(stage.id)).map(stage => workflowRoute(plan, stage.id));
+  return { operations_first: rows(first), operations_second: rows(second) };
+}
+
+/** Keep workflow credentials and approval selection bound to the same route used by the executor. */
+function workflowRoute(plan, stage) {
+  const route = stageRoute(plan, stage);
+  return { stage, provider: route.provider, approval: route.approval,
+    access_token_secret: route.credentials?.accessToken ?? '', service_account_secret: route.credentials?.serviceAccountBase64 ?? '' };
 }
 
 /** Reuse the immutable authority of an earlier attempt in this run, without adopting another run's plan. */
@@ -158,41 +164,13 @@ export async function mainWorker(args = process.argv.slice(2), environment = pro
     write('environment.json', inputs);
     return;
   }
-  if (command === 'operation-plan') {
-    const authorized = read('authorized.json'); const store = ledger(authorized.config);
-    let releaseId = environment.RELEASE_ID; let plan;
-    if (releaseId) {
-      invariant(['resume', 'retry'].includes(authorized.request.action) && String(authorized.request.releaseId) === releaseId, 'Retained recovery differs from its authorized request.');
-      const state = await store.read(releaseId);
-      invariant(state.release.draft && state.plan.retainedOperation, 'Resume requires an unresolved retained operation.');
-      plan = state.plan;
-      const remaining = summarizeRelease(plan.graph, state.events.filter(event => plan.stages[event.stage])).remaining;
-      workflowOutputs({ release_id: releaseId, ...operationMatrices(plan, remaining) });
-    } else {
-      invariant(authorized.request.action === 'operation', 'Expected a retained operation request.');
-      const request = authorized.request.retained;
-      const previous = (await store.list()).find(value => value.tag_name === `expo-release-${origin.runId}`);
-      if (previous) {
-        const state = await store.read(previous.id);
-        plan = verifyRunReservation(state, authorized, origin); releaseId = String(previous.id);
-        const remaining = summarizeRelease(plan.graph, state.events.filter(event => plan.stages[event.stage])).remaining;
-        invariant(state.release.draft || remaining.length === 0, 'Finalized retained operation is incomplete.');
-        workflowOutputs({ release_id: releaseId, ...operationMatrices(plan, remaining) });
-      } else {
-        plan = prepareRetainedOperation({ state: await store.read(request.releaseId), request, config: authorized.config,
-          source: authorized.source, origin });
-        const release = await store.begin(plan); releaseId = String(release.id);
-        workflowOutputs({ release_id: releaseId, ...operationMatrices(plan) });
-      }
-    }
-    return;
-  }
-  if (command === 'operation-stage') {
+  if (command === 'stage') {
+    invariant(['run', 'reconcile'].includes(environment.RELEASE_MODE), 'Unknown stage execution mode.');
     const config = await repositoryJson(api(), 'release.config.json', environment.CONSUMER_WORKFLOW_COMMIT); const store = ledger(config);
     const state = await store.read(environment.RELEASE_ID);
-    const route = routeRetainedOperation(state.plan, environment.RELEASE_STAGE);
+    const route = stageRoute(state.plan, environment.RELEASE_STAGE);
     invariant(route.provider === environment.RELEASE_PROVIDER && route.approval === (environment.RELEASE_APPROVAL ?? ''),
-      'Retained operation worker differs from its configured provider/approval boundary.');
+      'Stage worker differs from its configured provider/approval boundary.');
     const scoped = { ...environment };
     if (route.provider === 'play') {
       if (route.credentials.accessToken) scoped[route.credentials.accessToken] = environment.RELEASE_ACCESS_TOKEN;
@@ -201,13 +179,13 @@ export async function mainWorker(args = process.argv.slice(2), environment = pro
     if (environment.RELEASE_MODE === 'reconcile') {
       const request = read('authorized.json').request;
       invariant(request.action === 'reconcile' && String(request.releaseId) === String(environment.RELEASE_ID)
-        && (request.stage ?? request.reconciliation?.stage) === route.stage, 'Retained reconciliation changed its authorized operation.');
+        && (request.stage ?? request.reconciliation?.stage) === route.stage, 'Reconciliation changed its authorized operation.');
       return mainWorker(['reconcile'], scoped);
     }
-    const result = await executeRetainedOperation({ ledger: store, releaseId: environment.RELEASE_ID, stage: route.stage,
-      directory: path.join(stateRoot, 'retained'), environment: scoped, retry: environment.RELEASE_RETRY_STAGE === route.stage });
+    const result = await executeStage({ ledger: store, releaseId: environment.RELEASE_ID, stage: route.stage,
+      directory: path.join(stateRoot, 'retained'), environment: scoped, retryStage: environment.RELEASE_RETRY_STAGE });
     write('operation.json', result);
-    if (environment.GITHUB_STEP_SUMMARY) fs.appendFileSync(environment.GITHUB_STEP_SUMMARY, `Retained operation ${environment.RELEASE_ID}, ${route.stage}: ${result.complete ? 'complete' : 'pending'}\n`);
+    if (environment.GITHUB_STEP_SUMMARY) fs.appendFileSync(environment.GITHUB_STEP_SUMMARY, `Release ${environment.RELEASE_ID}, ${route.stage}: ${result.complete ? 'complete' : 'pending'}\n`);
     return;
   }
   if (command === 'install') {
@@ -233,7 +211,25 @@ export async function mainWorker(args = process.argv.slice(2), environment = pro
     return;
   }
   if (command === 'reserve') {
-    const authorized = read('authorized.json'); const plan = verifyPlan(read('plan.json'), authorized.source);
+    const authorized = read('authorized.json');
+    if (authorized.request.action === 'operation') {
+      const store = ledger(authorized.config); const request = authorized.request.retained;
+      const previous = (await store.list()).find(value => value.tag_name === `expo-release-${origin.runId}`);
+      let plan; let releaseId; let remaining;
+      if (previous) {
+        const state = await store.read(previous.id);
+        plan = verifyRunReservation(state, authorized, origin); releaseId = String(previous.id);
+        remaining = summarizeRelease(plan.graph, state.events.filter(event => plan.stages[event.stage])).remaining;
+        invariant(state.release.draft || remaining.length === 0, 'Finalized retained operation is incomplete.');
+      } else {
+        plan = prepareRetainedOperation({ state: await store.read(request.releaseId), request, config: authorized.config,
+          source: authorized.source, origin });
+        releaseId = String((await store.begin(plan)).id);
+      }
+      workflowOutputs({ release_id: releaseId, matrices: phaseMatrices(plan, remaining) });
+      return;
+    }
+    const plan = verifyPlan(read('plan.json'), authorized.source);
     invariant(hashIdentity(plan.config) === hashIdentity(authorized.config) && hashIdentity(plan.origin) === hashIdentity(authorized.origin), 'Source phase changed its trusted authority.');
     const rebuilt = planRelease({ ...authorized.request, config: authorized.config, source: authorized.source, origin: authorized.origin,
       observations: plan.components.map(component => component.observation), baseline: read('environment.json').baseline, providerConfiguration: read('environment.json').providerConfiguration });
@@ -286,7 +282,7 @@ export async function mainWorker(args = process.argv.slice(2), environment = pro
     invariant(prepared.reservationDigest === plan.digest && prepared.prepared, 'Prepared plan does not bind the validated candidate.');
     await store.append(environment.RELEASE_ID, { type: 'prepared', plan: prepared });
     write('plan.json', prepared);
-    workflowOutputs({ ...phaseMatrices(prepared), source });
+    workflowOutputs({ matrices: phaseMatrices(prepared), source });
     return;
   }
   if (command === 'finish') {
@@ -326,37 +322,28 @@ export async function mainWorker(args = process.argv.slice(2), environment = pro
       }
     }
     if (command === 'recover' && request.action === 'reconcile') {
-      if (state.plan.retainedOperation) {
-        const route = routeRetainedOperation(state.plan, request.stage);
-        invariant(route.provider !== 'image', 'Resume image finalization to verify its exact tag and alias state.');
-        workflowOutputs({ retained_reconcile: true, reconcile: false, execute: false, release_id: request.releaseId,
-          provider: route.provider, approval: route.approval, stage: route.stage,
-          access_token_secret: route.credentials?.accessToken ?? '', service_account_secret: route.credentials?.serviceAccountBase64 ?? '' });
-        return;
-      }
-      const target = recoveryTarget(state.plan, request.stage);
-      const deployment = request.stage === `${target.id}:deploy`;
-      workflowOutputs({ reconcile: true, approval: deployment ? state.plan.config.deployment.environment : target.approvalEnvironment ?? '',
-        provider: deployment ? 'deploy' : target.kind === 'server' ? 'image' : 'expo',
-        release_id: request.releaseId, execute: false });
+      const route = stageRoute(state.plan, request.stage);
+      invariant(route.operationStage === request.stage && route.action !== 'finalize'
+        && (route.action !== 'publish' || route.provider !== 'expo' || route.runtime),
+      'Reconcile the exact provider operation; resume canonical stage completion.');
+      workflowOutputs({ ...workflowRoute(state.plan, request.stage), reconcile: true, release_id: request.releaseId, execute: false });
       return;
     }
     const disposers = [];
     try {
       const result = await recoverRelease({ ledger: store, releaseId: request.releaseId, request,
         providerForStage: async input => {
-          const built = await recoveryProvider({ ...input, ledger: store, directory: path.join(stateRoot, 'reconciled'), environment });
+          const built = await createStageProvider({ ...input, ledger: store, directory: path.join(stateRoot, 'reconciled'), environment });
           if (built.dispose) disposers.push(built.dispose);
+          invariant(built.provider, 'Reconciliation requires an exact provider operation.');
           return built.provider;
         } });
       write('recovery.json', result);
       const execute = ['resume', 'retry'].includes(request.action);
       invariant(!execute || (result.prepared || result.plan.selection.noop),
         'Resume candidate preparation in the original producing workflow before running publication recovery.');
-      const matrices = execute ? Object.fromEntries(Object.entries(phaseMatrices(result.plan, result.stages))
-        .map(([key, value]) => [key, typeof value === 'object' ? JSON.stringify(value) : value])) : {};
-      workflowOutputs({ release_id: request.releaseId, execute: execute && !result.plan.retainedOperation,
-        retained: execute && Boolean(result.plan.retainedOperation), reconcile: false, matrices,
+      const matrices = execute ? phaseMatrices(result.plan, result.stages) : {};
+      workflowOutputs({ release_id: request.releaseId, execute, reconcile: false, matrices,
         retry_stage: request.action === 'retry' ? request.stage : '' });
     } finally { for (const dispose of disposers) dispose(); }
     return;

@@ -1,6 +1,8 @@
 /** @file Official Google authentication and Publisher transport; release code owns identity, intents and retries. */
 import { createHash, createPrivateKey } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { Readable } from 'node:stream';
 import { androidpublisher } from '@googleapis/androidpublisher';
 import { JWT, OAuth2Client } from 'google-auth-library';
@@ -63,4 +65,16 @@ export function createGooglePlayPublisher({ applicationId, accessToken, createCl
     /** Commit atomically while refusing pending Console review changes. */
     commitEdit: editId => call(edits.commit.bind(edits), { editId, changesInReviewBehavior: 'ERROR_IF_IN_REVIEW' }),
   });
+}
+
+/** Resolve only the credentials named by this promotion stage; generic or other-stage secrets are never fallback authority. */
+export async function resolvePromotionToken(credentials, environment, resolveToken = resolveGooglePlayAccessToken) {
+  const token = credentials.accessToken && environment[credentials.accessToken];
+  if (token) return resolveToken({ environment: { GOOGLE_PLAY_ACCESS_TOKEN: token } });
+  const encoded = credentials.serviceAccountBase64 && environment[credentials.serviceAccountBase64];
+  invariant(typeof encoded === 'string' && /^[A-Za-z0-9+/]+={0,2}$/.test(encoded), 'The selected promotion stage has no credentials.');
+  let value; try { value = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8')); } catch { throw new Error('The selected promotion service account is invalid.'); }
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'expo-play-key-'));
+  try { const file = path.join(directory, 'key.json'); fs.writeFileSync(file, JSON.stringify(value), { mode: 0o600 }); return await resolveToken({ serviceAccountFile: file, environment: {} }); }
+  finally { invariant(path.dirname(path.resolve(directory)) === path.resolve(os.tmpdir()), 'Credential cleanup escaped the temporary directory.'); fs.rmSync(directory, { recursive: true, force: true }); }
 }

@@ -9,18 +9,21 @@ import { resolveOtaBindings } from '../src/ota-runtime.mjs';
 import { exportOta, verifyOtaExports, publishOta } from '../src/ota.mjs';
 import { completeStage, recoveryStatus } from '../src/stages.mjs';
 import { hashIdentity } from '../packages/release-engine/index.mjs';
+import { createArtifactReceipt, verifyRetainedArtifact } from '../src/artifacts.mjs';
+import { executeStage, createStageProvider } from '../src/execution.mjs';
+import { exportPayload } from '../src/providers/eas.mjs';
 
 async function fixture(t, { empty = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ota-pipeline-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const source = { repository: 'fixture/app', commit: 'a'.repeat(40), workflowCommit: 'b'.repeat(40), toolkitCommit: 'c'.repeat(40) };
   const environmentHash = 'e'.repeat(64);
-  const native = { id: 'ios', kind: 'native', platform: 'ios', builder: 'eas', runtimePolicy: 'appVersion', channel: 'production', environment: 'production' };
-  const ota = { id: 'ota', kind: 'ota', nativeTarget: 'ios', platform: 'ios', channel: 'production', environment: 'production' };
+  const native = { id: 'ios', kind: 'native', platform: 'ios', builder: 'eas', runtimePolicy: 'appVersion', channel: 'production', environment: 'production', applicationId: 'fixture.app', profile: 'production' };
+  const ota = { id: 'ota', kind: 'ota', nativeTarget: 'ios', platform: 'ios', channel: 'production', environment: 'production', profile: 'production' };
   const expo = { projectId: '11111111-1111-4111-8111-111111111111', owner: 'fixture', slug: 'app' };
   const config = { schemaVersion: 1, repository: source.repository, defaultBranch: 'main', components: [native, ota], expo };
   const observed = runtime => ({ identity: 'native', runtime, fingerprint: hashIdentity(runtime), environmentHash,
-    version: runtime, versionCode: 2, releaseMetadata: { version: runtime, androidVersionCode: 3, iosBuildNumber: '2' } });
+    version: runtime, versionCode: 2, releaseMetadata: { version: runtime, androidVersionCode: 3, iosBuildNumber: '2' }, expoConfig: { name: 'Fixture' } });
   const first = { ...observed('1.0.0'), source: 'd'.repeat(40) };
   const second = { ...observed('0.9.0'), source: 'f'.repeat(40) };
   const baseline = { components: empty ? {} : { [baselineKey(native)]: first },
@@ -86,4 +89,42 @@ test('no compatible runtime finishes with explicit skip evidence without advanci
   await publishOta({ ...value, stageFactory: async () => { throw new Error('must not publish'); } });
   assert.equal(value.state.events.at(-1).receipt.outcome, 'skipped');
   assert.deepEqual(completedBaseline(value.plan, value.state.events).components, {});
+});
+
+test('shared executor and recovery factory bind each OTA runtime and reconcile a lost response without publishing twice', async t => {
+  const f = await fixture(t); const { plan, artifact } = f;
+  artifact.receipt = await createArtifactReceipt({ plan, target: 'ota', directory: artifact.directory,
+    metadata: { ...artifact.receipt.metadata, expo: plan.providerConfiguration.expo } });
+  artifact.sourceProof = await verifyRetainedArtifact({ plan, target: 'ota', ...artifact, verifyProducer: async () => true, verifyAttestation: async () => true });
+  const groups = new Map(); const launches = new Map(); const calls = [];
+  const bindings = artifact.receipt.metadata.bindings;
+  const easTransport = {
+    channel: async () => bindings[0].branch, exportPayload,
+    cli: async args => {
+      const binding = bindings.find(value => path.join(artifact.directory, value.directory) === args[args.indexOf('--input-dir') + 1]);
+      calls.push(binding.runtime);
+      const group = `00000000-0000-4000-8000-00000000000${calls.length}`;
+      launches.set(group, binding.payload.launch);
+      groups.set(group, [{ id: group, group, platform: 'IOS', runtime: { version: binding.runtime }, branch: binding.branch,
+        gitCommitHash: plan.source.commit, isGitWorkingTreeDirty: false, environment: 'production', message: args[args.indexOf('--message') + 1],
+        manifestFragment: { launchAsset: { fileSHA256: binding.payload.launch, storageKey: group }, assets: [],
+          extra: { expoClient: { extra: { eas: { projectId: plan.providerConfiguration.expo.projectId } } } } } }]);
+      if (calls.length === 2) throw Error('lost second runtime response');
+      return [{ group }];
+    },
+    getUpdate: async id => groups.get(id), listUpdates: async () => [...groups.values()],
+    assetUrls: async id => [{ storageKey: id, url: id }], hashArtifact: async url => Buffer.from(launches.get(url), 'base64url').toString('hex'),
+  };
+  const options = { ledger: f.ledger, releaseId: f.releaseId, stage: 'ota:publish', directory: artifact.directory,
+    restore: async () => artifact, easTransport, environment: {} };
+  await assert.rejects(executeStage(options), /lost second runtime response/);
+  const stage = `ota:publish:runtime-${bindings[1].key}`;
+  const observer = await createStageProvider({ ...options, state: f.state, stage });
+  try { assert.equal((await observer.provider.find()).status, 'complete'); assert.equal(calls.length, 2); }
+  finally { observer.dispose(); }
+  await executeStage(options);
+  assert.deepEqual(calls, ['1.0.0', '0.9.0']); assert.equal(recoveryStatus(f.state).summary.remaining.length, 0);
+  await assert.rejects(createStageProvider({ ...options, state: f.state, stage: 'ota:publish:runtime-invalid' }), /Invalid OTA/);
+  await assert.rejects(createStageProvider({ ...options, state: f.state, stage: `ota:publish:runtime-${'f'.repeat(64)}` }), /exact retained OTA/);
+  await assert.rejects(executeStage({ ...options, stage }), /not independently dispatched/);
 });

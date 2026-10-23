@@ -1,5 +1,8 @@
 /** @file Retain verified artifact inventories in the existing GitHub release ledger and restore identical bytes after interruption. */
 import fs from 'node:fs';
+import { verifyRetainedArtifact } from './artifacts.mjs';
+import { verifyProducer } from './github.mjs';
+import { verifyReceiptAttestation } from './attestation.mjs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { invariant, verifyArtifactManifest, validateArtifactPath, hashIdentity } from '../packages/release-engine/index.mjs';
@@ -72,4 +75,12 @@ export async function restoreArtifact({ ledger, releaseId, target, directory, ve
   const sourceProof = await verify(receipt, directory, receiptFile);
   invariant(sourceProof, 'Restored artifact verification did not return source proof.');
   return { receipt, receiptFile, directory, sourceProof };
+}
+
+/** Restore original receipt/attestation bytes into a fresh inert directory; the new operation never becomes their producer. */
+export async function restoreVerifiedArtifact({ ledger, state, target, directory, verifyAttestation = verifyReceiptAttestation }) {
+  return restoreArtifact({ ledger, releaseId: state.release.id, target, directory, verify: (receipt, folder, file) =>
+    verifyRetainedArtifact({ plan: state.plan, target, directory: folder, receipt,
+      verifyProducer: async value => Boolean(await verifyProducer(ledger.api, ledger.config, value.producer.origin, value.producer.workflowCommit)),
+      verifyAttestation: value => verifyAttestation({ api: ledger.api, config: ledger.config, receipt: value, file }) }) });
 }

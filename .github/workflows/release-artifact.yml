@@ -39,10 +39,8 @@ jobs:
     steps: &environment_steps
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: &toolkit { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: &node { node-version: '24' }
-      - run: &install npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
+        with: { eas: 'true' }
       - id: context
         run: node .toolkit/bin/artifact-worker.mjs context
         env:
@@ -86,10 +84,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: *toolkit
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
+        with: { eas: 'true' }
       - id: intent
         run: node .toolkit/bin/artifact-worker.mjs cloud-begin
         env:
@@ -120,10 +116,8 @@ jobs:
         with: *toolkit
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { ref: '${{ needs.environment.outputs.source || needs.approved-environment.outputs.source }}', fetch-depth: 0, persist-credentials: false, path: .app }
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
+        with: { eas: 'true' }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: { name: 'target-context-${{ inputs.target }}-${{ needs.environment.outputs.state_attempt || needs.approved-environment.outputs.state_attempt }}', path: .release-state }
       - if: (needs.environment.outputs.builder || needs.approved-environment.outputs.builder) == 'eas'
@@ -196,10 +190,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: *toolkit
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
+        with: { eas: 'true' }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: { name: 'target-context-${{ inputs.target }}-${{ needs.environment.outputs.state_attempt || needs.approved-environment.outputs.state_attempt }}', path: .release-state }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -226,10 +218,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: *toolkit
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: ${{ needs.environment.outputs.retention_name || needs.approved-environment.outputs.retention_name }}

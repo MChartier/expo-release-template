@@ -18,10 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: &toolkit { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: &node { node-version: '24' }
-      - run: &install npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: { name: '${{ inputs.artifact-name }}', path: .release-artifacts }
       - id: verify
@@ -49,10 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: *toolkit
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: *node
-      - run: *install
-      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: ./.toolkit/.github/actions/setup
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with: { name: '${{ inputs.artifact-name }}', path: .release-artifacts }
       - run: node .toolkit/bin/artifact-worker.mjs retain

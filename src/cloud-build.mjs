@@ -4,14 +4,11 @@ import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { hashIdentity, invariant, reduceOperation, verifyPlan } from '../packages/release-engine/index.mjs';
-import { createEasStage } from './eas-stages.mjs';
-import { createEasBuildProvider } from './providers/eas.mjs';
-import { createEasPublisherWorkspace } from './providers/eas-workspace.mjs';
+import { createEasStage, createCloudObserver } from './eas-stages.mjs';
 import { executeOperation, latestOperation } from './operations.mjs';
 import { stageContext } from './stages.mjs';
 import { sealBuild, verifyBuildSource } from './build.mjs';
 import { repositoryPath } from './config.mjs';
-import { sourceEnvironment } from './hooks.mjs';
 
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 function selected(plan, target) {
@@ -39,10 +36,9 @@ export async function beginCloudBuild({ ledger, releaseId, target, origin, retry
   if (operation) {
     invariant(operation.status === 'failed' && operation.operationId, 'Only an exact definitively failed EAS build may receive a replacement lease.');
     const component = selected(plan, target);
-    const composed = await createEasStage({ action: 'build', plan, component, transport: {} });
-    const workspace = createEasPublisherWorkspace({ ...composed.spec, expoConfig: component.observation.expoConfig }, { env: providerEnvironment });
+    const workspace = await createCloudObserver({ plan, component, transport, providerEnvironment });
     try {
-      const provider = createEasBuildProvider(composed.spec, transport ?? workspace.transport);
+      const provider = workspace.provider;
       const observed = await provider.status(operation.operationId);
       invariant(observed.status === 'failed' && ['ERRORED', 'CANCELED'].includes(observed.raw.status)
         && !observed.raw.artifacts?.applicationArchiveUrl && !observed.raw.artifacts?.buildUrl,
@@ -114,15 +110,9 @@ export async function monitorCloudBuild({ ledger, releaseId, target, accepted, i
   invariant(original, 'Cloud observation requires a durable enqueue intent.');
   const lease = original.request;
   matchingLease(lease, plan, target, lease?.origin);
-  const composed = await createEasStage({ action: 'build', plan, component: target, environment: inputs, transport: {} });
-  const workspace = createEasPublisherWorkspace({ ...composed.spec, expoConfig: component.observation.expoConfig },
-    { env: { ...sourceEnvironment(providerEnvironment), ...(providerEnvironment.EXPO_TOKEN ? { EXPO_TOKEN: providerEnvironment.EXPO_TOKEN } : {}) } });
+  const workspace = await createCloudObserver({ plan, component, transport, providerEnvironment });
   try {
-    const connection = transport || workspace.transport;
-    const buildProvider = createEasBuildProvider(composed.spec, connection);
-    const provider = { ...buildProvider,
-      /** Monitoring cannot enqueue even if its ledger has unexpectedly lost the durable intent. */
-      async start() { throw new Error('Cloud observer cannot enqueue a build.'); } };
+    const provider = workspace.provider;
     let operation = original;
     if (accepted) {
       invariant(accepted.schemaVersion === 1 && accepted.kind === 'expo-cloud-build-accepted' && uuid.test(accepted.id)

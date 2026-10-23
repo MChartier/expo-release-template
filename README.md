@@ -58,6 +58,8 @@ Deployments are policy driven: a consumer may require deployment for server chan
 
 The fixed workers support two native submission waves and two OTA publication waves. `after` sequences targets of the same kind; native handoff and deployment prerequisites come from the canonical stage model. Unsupported ordering is rejected during planning, before reserving or merging a candidate.
 
+`src/execution.mjs` constructs providers and executes source-free stages for new releases, retained operations and recovery. Retained plans reference their original producer and artifacts; recovery observes the same provider and resumes only unfinished stages. One scheduler receives matrices from the sealed stage graph. The shared stage workflow keeps provider credentials, protected environments and read-only image reconciliation in separate jobs. Its setup action installs dependencies before credentials enter the execution step; only Expo work installs EAS.
+
 Local `appVersion` builds keep a fingerprint collision guard beside the external machine settings: changed native inputs require a new native version, including across worktrees. This local memory is not a publication ledger, a hosted baseline, or permission to promote local evidence; GitHub Releases and verified hosted receipts retain those roles.
 
 ## Recovery

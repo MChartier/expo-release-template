@@ -10,7 +10,13 @@ import { createArtifactReceipt, verifyRetainedArtifact } from '../src/artifacts.
 import { completedBaseline } from '../src/planner.mjs';
 import { validateConfig } from '../src/config.mjs';
 import { createPlayCohortPromotionProvider } from '../src/providers/play-cohort.mjs';
-import { retainedOperationRequest, prepareRetainedOperation, routeRetainedOperation, executeRetainedOperation, retainedOperationProvider, restoreRetainedOperationArtifact, resolvePromotionToken } from '../src/retained-operations.mjs';
+import { retainedOperationRequest, prepareRetainedOperation } from '../src/retained-operations.mjs';
+import { stageRoute, stageContext } from '../src/stages.mjs';
+import { executeStage, createStageProvider } from '../src/execution.mjs';
+import { restoreVerifiedArtifact } from '../src/retention.mjs';
+import { phaseMatrices } from '../src/worker.mjs';
+import { recoverRelease } from '../src/recovery.mjs';
+import { resolvePromotionToken } from '../src/providers/play-transport.mjs';
 import { main } from '../src/cli.mjs';
 import { validateRequest } from '../src/trusted.mjs';
 
@@ -51,7 +57,7 @@ test('CLI retained planning is read-only and run dispatches only the exact seale
   assert.equal(mutations.length, 1); assert.equal(f.play.commits(), 0);
 });
 
-async function fixture(t, { submitted = true, separateApps = false } = {}) {
+async function fixture(t, { submitted = true, separateApps = false, handoff = false } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'retained-operation-test-'));
   t.after(() => { assert.equal(path.dirname(path.resolve(directory)), path.resolve(os.tmpdir())); fs.rmSync(directory, { recursive: true, force: true }); });
   const config = { schemaVersion: 1, repository: 'fixture/app', defaultBranch: 'main', defaultProfile: 'production',
@@ -70,8 +76,11 @@ async function fixture(t, { submitted = true, separateApps = false } = {}) {
   for (const component of components) {
     specs[`${component.id}:build`] = { target: component.id, action: 'build' };
     stages.push({ id: `${component.id}:build`, component: component.id, needs: [] });
-    if (submitted) { specs[`${component.id}:submit`] = { target: component.id, action: 'submit' };
-      stages.push({ id: `${component.id}:submit`, component: component.id, needs: [`${component.id}:build`] }); }
+    if (submitted) {
+      if (handoff) { specs[`${component.id}:handoff`] = { target: component.id, action: 'handoff' };
+        stages.push({ id: `${component.id}:handoff`, component: component.id, needs: [`${component.id}:build`] }); }
+      specs[`${component.id}:submit`] = { target: component.id, action: 'submit' };
+      stages.push({ id: `${component.id}:submit`, component: component.id, needs: [`${component.id}:${handoff ? 'handoff' : 'build'}`] }); }
   }
   const expo = { projectId, owner: 'fixture', slug: 'fixture-app' };
   const destinations = { phone: { track: 'internal', releaseStatus: 'completed' }, wear: { track: 'wear:internal', releaseStatus: 'completed' } };
@@ -110,7 +119,7 @@ async function fixture(t, { submitted = true, separateApps = false } = {}) {
     return { ...artifact, sourceProof };
   };
   const play = makePlay(components, artifacts);
-  const execute = (options = {}) => executeRetainedOperation({ ledger, releaseId: 42, stage: 'phone:promote', directory: path.join(directory, 'restored'),
+  const execute = (options = {}) => executeStage({ ledger, releaseId: 42, stage: 'phone:promote', directory: path.join(directory, 'restored'),
     environment: { GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN: 'fixture-stage-token' }, restore,
     publisherFactory: ({ applicationId, accessToken }) => { assert.equal(applicationId, components[0].applicationId); assert.equal(accessToken, 'fixture-stage-token'); return play.publisher; },
     ...options });
@@ -140,7 +149,7 @@ test('retained planning is read-only and creates fresh hosted authority while pr
   assert.equal(plan.retainedOperation.planDigest, f.original.plan.digest); assert.deepEqual(plan.reservations, {});
   assert.deepEqual(plan.graph.stages.map(value => value.id), ['phone:promote']);
   assert.deepEqual(plan.stages['phone:promote'].targets, ['phone', 'wear']);
-  assert.deepEqual(routeRetainedOperation(plan, 'phone:promote'), { stage: 'phone:promote', provider: 'play', approval: 'play-internal', credentials: f.config.promotions.closed.credentials });
+  assert.deepEqual(stageRoute(plan, 'phone:promote'), { stage: 'phone:promote', target: 'phone', action: 'promote', operationStage: 'phone:promote', provider: 'play', approval: 'play-internal', credentials: f.config.promotions.closed.credentials });
   assert.deepEqual(completedBaseline(plan, [{ stage: 'phone:promote', status: 'complete' }]), { components: {}, runtimes: {}, reservations: {} });
 });
 
@@ -209,7 +218,7 @@ test('stage credentials never fall back to unrelated environment secrets and tem
 
 test('standalone submission restores the original producer proof and records the new operation independently', async t => {
   const f = await fixture(t, { submitted: false }); const state = f.install(f.prepare(f.request('submit', { targets: ['phone'] })));
-  assert.equal(routeRetainedOperation(state.plan, 'phone:submit').approval, 'native-submit');
+  assert.equal(stageRoute(state.plan, 'phone:submit').approval, 'native-submit');
   const id = '00000000-0000-4000-8000-000000000080'; const fileHash = f.artifacts.get('phone').receipt.manifest.files[0].sha256; let submissions = 0;
   const easTransport = { cli: async args => { assert.equal(args[0], 'submit'); assert(args.includes('--path')); submissions++;
       return `https://expo.dev/accounts/fixture/projects/fixture-app/submissions/${id}`; },
@@ -219,6 +228,52 @@ test('standalone submission restores the original producer proof and records the
   assert.equal(state.events[0].operation.request.planDigest, state.plan.digest);
   assert.equal(state.events.at(-1).operation.receipt.artifact.origin.runId, '10');
   assert.equal(f.original.events.some(value => value.stage === 'phone:submit'), false);
+});
+
+test('normal handoff, recovery observation and completion reuse the same artifact and provider ID', async t => {
+  const f = await fixture(t, { handoff: true }); const state = f.original;
+  state.release.draft = true;
+  state.events = state.events.filter(event => event.type === 'artifact' || event.stage?.endsWith(':build'));
+  const id = '00000000-0000-4000-8000-000000000080'; let submissions = 0; let status = 'IN_PROGRESS';
+  const easTransport = {
+    cli: async () => { submissions++; return `https://expo.dev/accounts/fixture/projects/fixture-app/submissions/${id}`; },
+    getSubmission: async requested => { assert.equal(requested, id); return { id, app: { id: projectId }, platform: 'ANDROID', status,
+      archiveUrl: 'https://fixture.invalid/archive', androidConfig: { track: 'internal', releaseStatus: 'COMPLETED' } }; },
+    hashFile: async file => digest(fs.readFileSync(file)), hashArtifact: async () => f.artifacts.get('phone').receipt.manifest.files[0].sha256,
+  };
+  assert.equal((await f.execute({ releaseId: 41, stage: 'phone:handoff', easTransport })).complete, true);
+  assert.equal((await stageContext(f.ledger, 41, 'phone', 'submit')).complete, false);
+  const observer = await createStageProvider({ ledger: f.ledger, state, stage: 'phone:submit', directory: f.directory,
+    restore: f.restore, easTransport, environment: {} });
+  try {
+    await recoverRelease({ ledger: f.ledger, releaseId: 41, request: { action: 'reconcile', stage: 'phone:submit' },
+      providerForStage: async () => observer.provider });
+  } finally { observer.dispose(); }
+  assert.equal(submissions, 1);
+  status = 'FINISHED';
+  assert.equal((await f.execute({ releaseId: 41, stage: 'phone:submit', easTransport })).complete, true);
+  const restored = f.restores();
+  await f.execute({ releaseId: 41, stage: 'phone:submit', restore: async () => { throw Error('Completed stage restored again'); } });
+  assert.equal(f.restores(), restored); assert.equal(submissions, 1);
+  assert.equal(state.events.at(-1).operation.receipt.artifact.origin.runId, '10');
+});
+
+test('retained plans use the common scheduler without build, version, or duplicate successful stages', async t => {
+  const f = await fixture(t, { submitted: false });
+  const plan = f.prepare(f.request('submit', { targets: ['phone', 'wear'] }));
+  const matrices = phaseMatrices(plan);
+  assert.deepEqual(matrices.operations_first.map(value => value.stage), ['phone:submit']);
+  assert.deepEqual(matrices.operations_second.map(value => value.stage), ['wear:submit']);
+  for (const key of ['server', 'server_publish', 'server_finalize', 'native_builds', 'native_first', 'native_second', 'ota_first', 'ota_second']) {
+    assert.deepEqual(matrices[key], []);
+  }
+  assert.equal(matrices.deployment, ''); assert.deepEqual(plan.reservations, {});
+  assert.deepEqual(phaseMatrices(plan, ['wear:submit']).operations_first, []);
+  assert.deepEqual(phaseMatrices(plan, ['wear:submit']).operations_second, matrices.operations_second);
+  const submitted = await fixture(t);
+  const promotion = phaseMatrices(submitted.prepare(submitted.request('promote')));
+  assert.equal(promotion.operations_first.length, 1); assert.equal(promotion.operations_first[0].provider, 'play');
+  assert.equal(promotion.operations_first[0].access_token_secret, 'GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN');
 });
 
 test('a deserialized artifact proof cannot authorize Play promotion', async t => {
@@ -264,7 +319,7 @@ async function serverFixture(t) {
 test('standalone image promotion restores original bytes and keeps a newer protected version from moving latest backwards', async t => {
   const f = await serverFixture(t); const request = f.request('promote', { promotion: undefined, targets: ['server'] });
   const plan = f.prepare(request); f.install(plan);
-  assert.equal(routeRetainedOperation(plan, 'server:finalize').approval, 'server-publish');
+  assert.equal(stageRoute(plan, 'server:finalize').approval, 'server-publish');
   assert.equal((await f.execute({ stage: 'server:finalize', registry: f.registry })).complete, true); assert.equal(f.publications(), 1);
   const other = await serverFixture(t); other.install(other.prepare(other.request('promote', { promotion: undefined, targets: ['server'] })));
   other.version('9.0.0'); assert.equal((await other.execute({ stage: 'server:finalize', registry: other.registry })).complete, true); assert.equal(other.publications(), 0);
@@ -273,7 +328,7 @@ test('standalone image promotion restores original bytes and keeps a newer prote
 
 test('standalone deployment uses only deployment transport, preserves health-only evidence and blocks replay after timeout', async t => {
   const f = await serverFixture(t); const plan = f.prepare(f.request('deploy', { targets: ['server'] })); f.install(plan);
-  assert.equal(routeRetainedOperation(plan, 'server:deploy').approval, 'homelab'); let calls = 0;
+  assert.equal(stageRoute(plan, 'server:deploy').approval, 'homelab'); let calls = 0;
   const deploy = () => { calls++; return { service: 'fixture', healthy: true, evidence: 'webhook-health-response' }; };
   assert.equal((await f.execute({ stage: 'server:deploy', deploy })).complete, true); assert.equal(calls, 1); assert.equal(f.restores(), 0);
   await f.execute({ stage: 'server:deploy', deploy }); assert.equal(calls, 1);
@@ -285,7 +340,7 @@ test('standalone deployment uses only deployment transport, preserves health-onl
 
 test('retained reconciliation composes only an observer and reads original artifacts instead of a new producer inventory', async t => {
   const f = await fixture(t); const state = f.install(f.prepare(f.request()));
-  const composed = await retainedOperationProvider({ ledger: f.ledger, state, stage: 'phone:promote', directory: f.directory, restore: f.restore,
+  const composed = await createStageProvider({ ledger: f.ledger, state, stage: 'phone:promote', directory: f.directory, restore: f.restore,
     environment: { GOOGLE_PLAY_INTERNAL_ACCESS_TOKEN: 'fixture-stage-token' }, publisherFactory: () => f.play.publisher });
   try { assert.equal(f.play.commits(), 0); const observed = await composed.provider.find(); assert.equal(observed.status, 'unknown');
     assert.equal((await composed.provider.verify(observed)).status, 'unknown'); assert.equal(f.play.updates(), 0); assert.equal(state.events.length, 0); }

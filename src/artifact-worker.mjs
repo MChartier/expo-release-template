@@ -8,17 +8,14 @@ import { GitHubLedger } from './ledger.mjs';
 import { repositoryPath } from './config.mjs';
 import { verifyRetainedArtifact } from './artifacts.mjs';
 import { verifyReceiptAttestation } from './attestation.mjs';
-import { retainArtifact, restoreArtifact, retentionRecovery } from './retention.mjs';
-import { stageContext, completeStage, runProviderStage } from './stages.mjs';
+import { retainArtifact, retentionRecovery } from './retention.mjs';
+import { stageContext, completeStage } from './stages.mjs';
 import { buildApplication, prepareBuild } from './build.mjs';
 import { readReleaseEnvironment } from './environment.mjs';
 import { workflowOutputs } from './worker.mjs';
-import { inspectOciArchive, createGhcrProvider, createGhcrTransport } from './providers/ghcr.mjs';
-import { createDeploymentProvider } from './providers/deploy.mjs';
+import { inspectOciArchive } from './providers/ghcr.mjs';
 import { createEasTransport } from './providers/eas.mjs';
-import { verifyOtaExports, publishOta } from './ota.mjs';
-import { finalizeServer } from './server-release.mjs';
-import { latestOperation } from './operations.mjs';
+import { verifyOtaExports } from './ota.mjs';
 
 /** Route signing secrets only to an explicitly configured command Android builder. */
 export function signingSecretNames(component) {
@@ -154,35 +151,6 @@ export async function artifactWorker(command, environment = process.env) {
     }
     if (environment.GITHUB_OUTPUT) fs.appendFileSync(environment.GITHUB_OUTPUT, `receipt_files<<RECEIPTS\n${files.join('\n')}\nRECEIPTS\n`);
     return;
-  }
-  if (command === 'publish') {
-    if (action === 'deploy') {
-      const provider = createDeploymentProvider(plan.config.deployment, { environment });
-      return runProviderStage({ ledger, releaseId, target, action, provider, request: { service: plan.config.deployment.service },
-        retry: environment.RELEASE_RETRY_STAGE === `${target}:deploy` });
-    }
-    const artifact = await restoreArtifact({ ledger, releaseId, target, directory: repositoryPath(outputRoot, `${target}/restored`), verify: verifier });
-    if (component.kind === 'server') {
-      const image = component.image; const version = component.observation.version;
-      const transport = createGhcrTransport({ image, username: environment.GITHUB_ACTOR, token: environment.GHCR_TOKEN });
-      if (action === 'finalize') return finalizeServer({ ledger, releaseId, target, api, artifact: {
-        ...artifact, file: path.join(artifact.directory, 'image.oci.tar') }, transport });
-      invariant(/^\d+\.\d+\.\d+$/.test(version), 'Server publication requires an exact semantic version.');
-      const aliases = [`v${version}`, `sha-${plan.source.commit}`];
-      const provider = createGhcrProvider({ image, source: plan.source.commit, target, sourceProof: artifact.sourceProof,
-        file: path.join(artifact.directory, 'image.oci.tar'), oci: artifact.receipt.metadata.oci, aliases },
-      transport);
-      return runProviderStage({ ledger, releaseId, target, action, provider, request: { image, aliases }, retry: environment.RELEASE_RETRY_STAGE === `${target}:${action}` });
-    }
-    if (component.kind === 'ota') return publishOta({ ledger, releaseId, plan, component, artifact,
-      providerEnvironment: environment, retryStage: environment.RELEASE_RETRY_STAGE });
-    const { createEasStage } = await import('./eas-stages.mjs');
-    const built = await createEasStage({ action: component.kind === 'ota' ? 'publish' : action, plan, component, artifact,
-      sourceProof: artifact.sourceProof, providerEnvironment: environment,
-      operation: latestOperation((await ledger.read(releaseId)).events, `${target}:submit`) });
-    try { return await runProviderStage({ ledger, releaseId, target, action: component.kind === 'ota' ? 'publish' : 'submit',
-      provider: built.provider, handoff: action === 'handoff', retry: environment.RELEASE_RETRY_STAGE === `${target}:submit` }); }
-    finally { built.dispose?.(); }
   }
   throw new Error(`Unknown artifact worker command ${command}.`);
 }

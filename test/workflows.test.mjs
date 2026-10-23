@@ -51,7 +51,8 @@ test('every nested call exists, forwards declared secrets explicitly, and propag
 });
 
 test('publishers use independently pinned tooling and never install or execute application source', () => {
-  for (const file of ['release-publish.yml', 'release-image.yml', 'release-deploy.yml', 'release-attest.yml']) for (const job of Object.values(workflows[file].jobs)) {
+  for (const file of ['release-stage.yml', 'release-attest.yml']) for (const job of Object.values(workflows[file].jobs)) {
+    assert(!job.env, 'Installation inherits job-level credentials');
     for (const step of job.steps ?? []) {
       if (step.uses?.startsWith('actions/checkout@')) {
         assert.equal(step.with.repository, 'MChartier/expo-release-template'); assert.equal(step.with.ref, '${{ job.workflow_sha }}');
@@ -61,7 +62,7 @@ test('publishers use independently pinned tooling and never install or execute a
       if (step.run?.includes('npm ci')) assert(!step.env?.EXPO_TOKEN && !step.env?.GH_TOKEN, 'Dependency install received publication credentials');
     }
   }
-  assert.equal(workflows['release-publish.yml'].jobs['approved-publish'].environment, '${{ inputs.approval }}');
+  assert.equal(workflows['release-stage.yml'].jobs['approved-expo'].environment, '${{ inputs.approval }}');
   assert.equal(workflows['release-artifact.yml'].jobs['approved-environment'].environment, '${{ inputs.approval }}');
   assert.equal(workflows['release-artifact.yml'].jobs['signed-source'].environment, '${{ inputs.signing-environment }}');
   const native = workflows['release-artifact.yml'];
@@ -69,6 +70,47 @@ test('publishers use independently pinned tooling and never install or execute a
     for (const caller of ['release-handler.yml', 'release-components.yml', 'release-recovery.yml']) {
       assert(Object.hasOwn(workflows[caller].on.workflow_call.secrets, name), `Existing environment secret ${name} was lost in ${caller}`);
     }
+  }
+});
+
+test('shared provider jobs preserve approvals, read-only image reconciliation and isolated credential setup', () => {
+  const jobs = workflows['release-stage.yml'].jobs;
+  for (const [name, job] of Object.entries(jobs)) {
+    assert.deepEqual(job.steps, jobs.expo.steps);
+    assert.equal(job.environment, name.startsWith('approved-') ? '${{ inputs.approval }}' : undefined);
+    assert.equal(job.permissions.packages, name.includes('image') ? name.includes('observe') ? 'read' : 'write' : undefined);
+    if (name.includes('image')) assert(job.if.includes(`inputs.mode == '${name.includes('observe') ? 'reconcile' : 'run'}'`));
+  }
+  const steps = jobs.expo.steps;
+  const execute = steps.find(step => step.run?.endsWith('worker.mjs stage'));
+  assert.equal(steps.filter(step => step.env).length, 1);
+  assert.equal(steps.find(step => step.uses?.endsWith('/setup')).with.eas, "${{ inputs.provider == 'expo' }}");
+  for (const [key, value] of Object.entries(execute.env)) {
+    if (key.startsWith('DEPLOY_') && value.includes('secrets.')) assert(value.includes("inputs.provider == 'deploy' && inputs.mode == 'run'"));
+    if (['EXPO_TOKEN', 'GHCR_TOKEN', 'RELEASE_ACCESS_TOKEN', 'RELEASE_SERVICE_ACCOUNT'].includes(key)) {
+      assert(value.includes(`inputs.provider == '${key === 'EXPO_TOKEN' ? 'expo' : key === 'GHCR_TOKEN' ? 'image' : 'play'}'`));
+    }
+  }
+  const setup = parse(fs.readFileSync(path.join(root, '.github/actions/setup/action.yml'), 'utf8'));
+  assert(setup.runs.steps.some(step => step.run?.endsWith('expo-release.mjs setup')));
+  assert(setup.runs.steps.every(step => !step.env && !JSON.stringify(step).includes('secrets.')));
+});
+
+test('new requests and recovery share the scheduler while retained requests bypass source and candidate work', () => {
+  const handler = workflows['release-handler.yml'].jobs; const recovery = workflows['release-recovery.yml'].jobs;
+  assert.equal(handler.components.uses, recovery.components.uses);
+  assert(handler.reserve.if.includes("needs.authorize.outputs.action == 'operation' || needs.plan.result == 'success'"));
+  assert(handler.components.if.includes("needs.authorize.outputs.action == 'operation' || needs.merge.result == 'success'"));
+  assert.equal(handler.components.with.matrices, '${{ needs.reserve.outputs.matrices || needs.merge.outputs.matrices }}');
+  for (const step of handler.reserve.steps.filter(step => /release-(environment|plan)-/.test(step.with?.name ?? ''))) {
+    assert.equal(step.if, "needs.authorize.outputs.action == 'release'");
+  }
+  assert.equal(recovery.reconcile.uses, './.github/workflows/release-stage.yml');
+  assert.equal(recovery.reconcile.with.mode, 'reconcile');
+  assert.equal(handler.environment.if, "needs.authorize.outputs.action == 'release'");
+  assert(handler.candidate.needs.includes('plan')); assert(handler.merge.needs.includes('validation'));
+  for (const job of Object.values(workflows['release-components.yml'].jobs)) {
+    if (job.strategy) assert(!JSON.stringify(job.strategy).includes('fromJSON(fromJSON('));
   }
 });
 
