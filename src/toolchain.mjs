@@ -62,6 +62,8 @@ export function setupToolchain({ environment = process.env, run = execFileSync, 
   }
   finally {
     invariant(path.dirname(path.resolve(temporary)) === parent, 'Toolchain cleanup escaped its cache.');
-    fs.rmSync(temporary, { recursive: true, force: true });
+    // Windows scanners can briefly hold files open. An inaccessible staging folder is never a reusable cache.
+    try { fs.rmSync(temporary, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }
+    catch { /* Preserve the setup failure instead of masking it with a cleanup error; the next attempt uses a new directory. */ }
   }
 }
