@@ -36,7 +36,10 @@ test('setup publishes only a complete cache and subsequent invocations do no ins
 
 test('an interrupted installation leaves no reusable marker and can be retried from scratch', t => {
   const f = fixture(t);
-  assert.throws(() => setupToolchain({ ...f, run: () => { throw Error('private npm diagnostic'); } }), /no incomplete cache/);
+  assert.throws(() => setupToolchain({ ...f, run: () => { throw Object.assign(Error('private npm diagnostic'), { stderr: 'npm error code ECONNRESET\nprivate registry token', status: 1 }); } }), error => {
+    assert.match(error.message, /npm installation \(ECONNRESET, exit 1\)/); assert.match(error.message, /no incomplete cache/);
+    assert.doesNotMatch(error.message, /private/); return true;
+  });
   assert.deepEqual(fs.readdirSync(f.base), []);
   assert.equal(fs.existsSync(toolchainLocation(f.environment)), false);
   assert.equal(setupToolchain(f).cached, false);

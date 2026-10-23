@@ -36,6 +36,7 @@ export function setupToolchain({ environment = process.env, run = execFileSync, 
   invariant(!directory.startsWith(`${path.resolve(process.cwd())}${path.sep}`), 'Provider tools must use an external cache, outside application source.');
   fs.mkdirSync(parent, { recursive: true });
   const temporary = fs.mkdtempSync(path.join(parent, '.install-'));
+  let phase = 'npm installation';
   try {
     for (const name of ['package.json', 'package-lock.json']) fs.copyFileSync(path.join(source, name), path.join(temporary, name));
     const candidates = [npmCli, environment.npm_execpath, path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'), path.resolve(path.dirname(process.execPath), '../lib/node_modules/npm/bin/npm-cli.js')].filter(Boolean);
@@ -44,14 +45,21 @@ export function setupToolchain({ environment = process.env, run = execFileSync, 
     run(process.execPath, [executable, 'ci', '--prefix', temporary, '--ignore-scripts', '--no-audit', '--no-fund'], {
       cwd: temporary, env: sourceEnvironment(environment), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout: 600000, maxBuffer: 16 * 1024 * 1024,
     });
+    phase = 'EAS executable check';
     run(process.execPath, [path.join(temporary, 'node_modules/eas-cli/bin/run'), '--version'], {
-      env: sourceEnvironment(environment), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000,
+      cwd: temporary, env: sourceEnvironment(environment), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000,
     });
     fs.writeFileSync(path.join(temporary, '.ready'), `${version}\n`);
+    phase = 'cache activation';
     try { fs.renameSync(temporary, directory); }
     catch (error) { if (!fs.existsSync(path.join(directory, '.ready'))) throw error; }
     return { directory: resolveToolchain(environment), version, cached: false };
-  } catch { throw new Error('Provider setup failed; no incomplete cache was activated. Check npm registry access and rerun expo-release setup.'); }
+  } catch (error) {
+    // Report only fixed phase/status/code fields; npm output can include private registry configuration.
+    const code = /npm (?:ERR!|error) code ([A-Z][A-Z0-9_]{1,40})\b/.exec(String(error.stderr ?? ''))?.[1]
+      || (/^[A-Z][A-Z0-9_]{1,40}$/.test(error.code ?? '') ? error.code : 'unknown');
+    throw new Error(`Provider setup failed during ${phase} (${code}, exit ${Number.isInteger(error.status) ? error.status : 'unknown'}); no incomplete cache was activated. Check npm registry access and rerun expo-release setup.`);
+  }
   finally {
     invariant(path.dirname(path.resolve(temporary)) === parent, 'Toolchain cleanup escaped its cache.');
     fs.rmSync(temporary, { recursive: true, force: true });
