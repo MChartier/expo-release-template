@@ -1,6 +1,6 @@
 /** @file Audited recovery of immutable release plans; observations never enqueue and successful independent stages remain unchanged. */
-import { hashIdentity, invariant, reduceOperation } from '../packages/release-engine/index.mjs';
-import { latestOperation } from './operations.mjs';
+import { invariant, reduceOperation } from '../packages/release-engine/index.mjs';
+import { latestOperation, observeProvider, observationTransitions } from './operations.mjs';
 import { recoveryStatus } from './stages.mjs';
 import { abandonCandidate } from './candidate.mjs';
 
@@ -50,18 +50,8 @@ export async function recoverRelease({ ledger, releaseId, request, providerForSt
       next = reduceOperation(next, { type: 'reconciled-absent', proof });
     } else {
       invariant(!request.operationId || !next.operationId || request.operationId === next.operationId, 'Recovery cannot replace a retained provider ID.');
-      const id = next.operationId || request.operationId;
-      const observed = id ? await provider.status(id, context) : await provider.find(context);
-      invariant(observed && (!id || observed.id === id), 'No exact provider observation; an empty search is not proof of absence.');
-      const proof = await provider.verify(observed, { ...context, observe: true });
-      invariant(proof && typeof proof === 'object' && Object.keys(proof).length, 'Recovery requires concrete provider evidence.');
-      // A formerly failed operation cannot silently change state; retry will reverify its exact ID.
-      if (next.status === 'failed') invariant(observed.status === 'failed', 'A terminal provider observation conflicts with the retained failure.');
-      else if (next.status === 'unknown' && observed.id) next = reduceOperation(next, { type: 'accepted', operationId: observed.id, proof });
-      if (observed.status === 'complete') next = reduceOperation(next, { type: 'complete', receipt: proof, proof });
-      else if (observed.status === 'failed') next = reduceOperation(next, { type: 'failed', definitive: true, reason: 'Fresh provider readback confirmed terminal failure.', proof });
-      else if (observed.status === 'accepted') next = reduceOperation(next, { type: 'observed', proof });
-      else { invariant(observed.status === 'unknown', 'Unsupported provider recovery observation.'); next = reduceOperation(next, { type: 'unknown', reason: 'Provider outcome remains ambiguous.' }); }
+      const { observed, proof } = await observeProvider({ provider, operation: next, context, operationId: next.operationId || request.operationId });
+      for (const event of observationTransitions(next, observed, proof)) next = reduceOperation(next, event);
     }
     await ledger.append(releaseId, { type: 'recovery', action: 'reconcile', stage, status: next.status, operation: next });
     return inspectRecovery({ ledger, releaseId });

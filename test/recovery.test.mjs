@@ -82,9 +82,9 @@ test('unknown result can attach only a freshly verified exact provider ID', asyn
 test('empty searches and wrong observed IDs do not authorize lost-response retry', async () => {
   const f = fixture(); f.add('android:build-provider');
   const request = { action: 'reconcile', stage: 'android:build-provider' };
-  await assert.rejects(recoverRelease({ ...f.input, request, providerForStage: async () => ({ find: async () => null }) }), /empty search/);
+  await assert.rejects(recoverRelease({ ...f.input, request, providerForStage: async () => ({ find: async () => null }) }), /absence from a search/);
   await assert.rejects(recoverRelease({ ...f.input, request: { ...request, operationId: 'one' },
-    providerForStage: async () => ({ status: async () => ({ id: 'two' }) }) }), /exact provider/);
+    providerForStage: async () => ({ status: async () => ({ id: 'two' }) }) }), /retained operation ID/);
   assert.equal(f.state.events.length, 2);
 });
 

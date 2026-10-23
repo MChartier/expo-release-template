@@ -4,8 +4,8 @@ import { resolve } from 'node:path';
 const require = createRequire(import.meta.url);
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 /** Isolate pinned private SDK access; this adapter cannot enqueue, upload or publish. */
-export function createEasEvidence({ location, env }) {
-  const sdk = name => require(resolve(location(), 'build', name));
+export function createEasEvidence({ location, env, loadModule = name => require(resolve(location(), 'build', name)) }) {
+  const sdk = loadModule;
   const client = () => {
     const SessionManager = sdk('user/SessionManager.js').default;
     const session = new SessionManager();

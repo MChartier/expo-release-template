@@ -6,6 +6,32 @@ export function latestOperation(events, stage) {
   return events.findLast(event => event.stage === stage && event.operation)?.operation ?? null;
 }
 
+/** Read and verify one exact provider result for execution or explicit reconciliation; an empty search proves nothing. */
+export async function observeProvider({ provider, operation, context, operationId = operation.operationId }) {
+  invariant(operationId || provider.find, 'Provider has no automatic reconciliation transport.');
+  const observed = operationId ? await provider.status(operationId, context)
+    : await provider.find({ ...context, previousIds: (operation.history ?? []).map(item => item.operationId).filter(Boolean) });
+  invariant(observed, 'No unique provider result; absence from a search does not authorize another request.');
+  invariant(!operationId || observed.id === operationId, 'Provider observation differs from the retained operation ID.');
+  const proof = await provider.verify(observed, { ...context, observe: true });
+  invariant(proof && typeof proof === 'object' && Object.keys(proof).length, 'Provider verification returned no evidence.');
+  return { observed, proof };
+}
+
+/** Translate verified readback into the same durable transitions for execution and recovery. */
+export function observationTransitions(operation, observed, proof) {
+  if (operation.status === 'failed') invariant(observed.status === 'failed', 'A terminal provider observation conflicts with the retained failure.');
+  const events = operation.status === 'unknown' && observed.id ? [{ type: 'accepted', operationId: observed.id, proof }] : [];
+  if (observed.status === 'complete') events.push({ type: 'complete', receipt: proof, proof });
+  else if (observed.status === 'failed') events.push({ type: 'failed', definitive: true, reason: observed.reason ?? 'Provider reported terminal failure.', proof });
+  else if (observed.status === 'unknown') events.push({ type: 'unknown', reason: 'Provider cannot establish the current operation outcome.' });
+  else {
+    invariant(observed.status === 'accepted', 'Unsupported provider observation status.');
+    events.push({ type: 'observed', proof });
+  }
+  return events;
+}
+
 /** Execute or observe one operation; retries require an explicit request and fresh provider authorization. */
 export async function executeOperation({ ledger, releaseId, stage, provider, context, retry = false }) {
   let operation = latestOperation((await ledger.read(releaseId)).events, stage);
@@ -49,15 +75,7 @@ export async function executeOperation({ ledger, releaseId, stage, provider, con
       throw error;
     }
   }
-  let observed;
-  if (operation.operationId) observed = await provider.status(operation.operationId, context);
-  else {
-    invariant(provider.find, 'Provider has no automatic reconciliation transport.');
-    observed = await provider.find({ ...context, previousIds: (operation.history ?? []).map(item => item.operationId).filter(Boolean) });
-    invariant(observed, 'No unique provider result; absence from a search does not authorize another request.');
-  }
-  let proof = await provider.verify(observed, { ...context, observe: true });
-  invariant(proof && typeof proof === 'object' && Object.keys(proof).length > 0, 'Provider verification returned no evidence.');
+  let { observed, proof } = await observeProvider({ provider, operation, context });
   if (observed.status === 'unknown' && retry && provider.resumeUnknown) {
     // The provider must reverify an idempotent continuation; generic enqueue retry remains forbidden.
     await ledger.append(releaseId, { stage, status: operation.status, operation, continuation: { proof, requested: true } });
@@ -65,16 +83,7 @@ export async function executeOperation({ ledger, releaseId, stage, provider, con
     proof = await provider.verify(observed, { ...context, observe: true });
     invariant(proof && Object.keys(proof).length, 'Continuation lacks fresh provider evidence.');
   }
-  if (operation.status === 'unknown' && observed.id) await save({ type: 'accepted', operationId: observed.id, proof });
-  if (observed.status === 'complete') await save({ type: 'complete', receipt: proof, proof });
-  else if (observed.status === 'failed') {
-    // Failure does not by itself prove that a new upload is safe. Retry rechecks transport authorization.
-    await save({ type: 'failed', definitive: true, reason: observed.reason ?? 'Provider reported terminal failure.', proof });
-  } else if (observed.status === 'unknown') await save({ type: 'unknown', reason: 'Provider cannot establish the current operation outcome.' });
-  else {
-    invariant(observed.status === 'accepted', 'Unsupported provider observation status.');
-    await save({ type: 'observed', proof });
-  }
+  for (const event of observationTransitions(operation, observed, proof)) await save(event);
   return operation;
 }
 

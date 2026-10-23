@@ -84,7 +84,7 @@ export function writeLocalReceipt(root: string, plan: PipelinePlan, artifacts: L
 export interface RetainedOperationRequest {
   schemaVersion: 1; kind: 'expo-release-operation'; operation: 'submit' | 'deploy' | 'promote'; digest: string;
   releaseId: string; planDigest: string; configuration: string; targets: string[]; promotion?: string;
-  original: { format: 'common' | 'calibrate-v1'; digest: string; source: string; profile: string; origin: ReleaseOrigin };
+  original: { format: 'common'; digest: string; source: string; profile: string; origin: ReleaseOrigin };
   artifacts: ({ target: string; receiptDigest: string; inventoryDigest: string; receiptAsset: Record<string, any> }
     | { target: string; metadataDigest: string; sha256: string })[];
 }

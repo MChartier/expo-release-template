@@ -71,6 +71,18 @@ test('completed independent OTA survives later native failure and recovery does 
   await assert.rejects(completeStage({ ...input, target: 'ota', action: 'publish', receipt: { identity: 'changed' } }), /replace/);
 });
 
+test('readback cannot replace a retained provider ID or authorize a second request', async () => {
+  const { input, state } = fixture();
+  await completeStage({ ...input, target: 'phone', action: 'build', receipt: { hash: 'retained' } });
+  let enqueues = 0;
+  const provider = { start: async () => { enqueues++; return { id: 'original' }; },
+    status: async () => ({ id: 'other', status: 'complete' }), verify: async () => ({ artifact: 'exact' }) };
+  await assert.rejects(runProviderStage({ ...input, target: 'phone', action: 'submit', provider, handoff: true }), /retained operation ID/);
+  await assert.rejects(runProviderStage({ ...input, target: 'phone', action: 'submit', provider, handoff: true }), /retained operation ID/);
+  assert.equal(enqueues, 1);
+  assert.equal(recoveryStatus(state).operations['phone:submit'].operationId, 'original');
+});
+
 test('protected merge binding retains candidate and toolkit identities separately', () => {
   const { reservation, plan, source } = fixture();
   const merged = bindMergedPlan(reservation, plan, { ...source, commit: 'd'.repeat(40) });

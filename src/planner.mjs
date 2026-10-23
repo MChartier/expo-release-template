@@ -157,7 +157,7 @@ export function planRelease({ config, source, origin, observations, baseline = {
     const requested = !targets.length || targets.includes(component.id);
     const enabled = compatibleOperation;
     return { id: component.id, kind: component.kind, identity,
-      baselineIdentity: requested ? old?.identity ?? observation.baselineIdentity ?? null : identity, enabled,
+      baselineIdentity: requested ? old?.identity ?? null : identity, enabled,
       force: enabled && requested && (operation !== 'release' || observation.environmentDeferred && component.compareEnvironment !== false),
       reasons: [...(observation.reasons ?? []), ...(observation.environmentDeferred ? ['environment-awaiting-approval'] : [])] };
   });

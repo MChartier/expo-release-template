@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sourceEnvironment } from '../src/hooks.mjs';
@@ -12,6 +13,13 @@ import { setupToolchain, resolveToolchain } from '../src/toolchain.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 test('clean tarball and immutable Git installs expose only the public contract and share official tool setup', { skip: process.env.EXPO_RELEASE_INSTALL_TEST !== '1', timeout: 600000 }, () => {
   setupToolchain(); const toolchain = resolveToolchain();
+  const sdk = createRequire(import.meta.url);
+  for (const [module, methods] of Object.entries({ BuildQuery: ['withSubmissionsByIdAsync'], SubmissionQuery: ['byIdWithSubmittedBuildAsync'],
+    UpdateQuery: ['viewUpdateGroupsOnBranchAsync', 'viewUpdateGroupAsync'], AssetQuery: ['getSignedUrlsAsync'],
+    ChannelQuery: ['viewUpdateChannelAsync'], EnvironmentVariablesQuery: ['byAppIdWithSensitiveAsync'] })) {
+    const loaded = sdk(path.join(toolchain, 'node_modules/eas-cli/build/graphql/queries', `${module}.js`))[module];
+    for (const method of methods) assert.equal(typeof loaded[method], 'function', `${module}.${method} private evidence contract changed`);
+  }
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'release-install-'));
   const npm = process.env.npm_execpath || path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
   const run = (args, cwd = directory) => execFileSync(process.execPath, args, { cwd, env: sourceEnvironment(), windowsHide: true,

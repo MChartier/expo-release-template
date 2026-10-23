@@ -28,7 +28,7 @@ export async function verifyCompatibleRuntime({ component, baseline, observation
   invariant(!fingerprintOnly || component.runtimePolicy === 'fingerprint', 'Fingerprint compatibility requires fingerprint runtime policy.');
   invariant(runtime && observation.runtime === runtime && baseline.fingerprint === observation.fingerprint
     && (fingerprintOnly ? runtime === observation.fingerprint : baseline.environmentHash === observation.environmentHash), 'Retained runtime fingerprint/environment differs from the inspected export.');
-  const compatibility = baseline.compatibilityIdentity || baseline.compatibility;
+  const compatibility = baseline.compatibilityIdentity;
   if (compatibility) invariant(compatibility === observation.compatibilityIdentity, 'Retained native compatibility differs.');
   invariant(!retiredRuntimes.some(item => item.platform === component.platform && item.profile === profile && item.runtimeVersion === runtime), 'Selected runtime was explicitly retired.');
   invariant(typeof isAncestor === 'function' && await isAncestor(baseline.source || baseline.commit, source), 'Retained native source is not an ancestor of the export source.');

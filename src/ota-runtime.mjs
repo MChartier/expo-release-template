@@ -183,7 +183,7 @@ export async function resolveOtaBindings(args) {
       invariant(current.fingerprint === baseline.fingerprint && current.environmentHash === baseline.environmentHash, 'Prepared runtime conflicts with its original native proof.');
       continue;
     }
-    const compatibility = baseline.compatibilityIdentity || baseline.compatibility;
+    const compatibility = baseline.compatibilityIdentity;
     let reason;
     if (retired.some(value => value.platform === target.platform && value.profile === plan.profile && value.runtimeVersion === runtime)) reason = 'retired';
     else if (!fingerprintOnly && baseline.environmentHash !== environment.hash) reason = 'environment-changed';
