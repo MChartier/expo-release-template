@@ -47,7 +47,7 @@ export function setupToolchain({ environment = process.env, run = execFileSync, 
     });
     phase = 'EAS executable check';
     run(process.execPath, [path.join(temporary, 'node_modules/eas-cli/bin/run'), '--version'], {
-      cwd: temporary, env: sourceEnvironment(environment), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000,
+      cwd: temporary, env: sourceEnvironment(environment), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000,
     });
     fs.writeFileSync(path.join(temporary, '.ready'), `${version}\n`);
     phase = 'cache activation';
