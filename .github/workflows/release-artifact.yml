@@ -1,0 +1,265 @@
+# The environment gate precedes source export; only the isolated downstream signer receives OIDC/attestation authority.
+name: Build selected release artifact
+on:
+  workflow_call:
+    inputs:
+      release-id: { type: string, required: true }
+      target: { type: string, required: true }
+      action: { type: string, required: true }
+      approval: { type: string, default: '' }
+      signing-environment: { type: string, default: '' }
+      retry-stage: { type: string, default: '' }
+    secrets:
+      EXPO_TOKEN: { required: false }
+      ANDROID_KEYSTORE_BASE64: { required: false }
+      ANDROID_STORE_PASSWORD: { required: false }
+      ANDROID_KEY_ALIAS: { required: false }
+      ANDROID_KEY_PASSWORD: { required: false }
+permissions: { contents: read }
+jobs:
+  environment:
+    if: inputs.approval == ''
+    runs-on: ubuntu-latest
+    # GitHub requires Contents write to inspect draft ledgers; application source never runs here.
+    permissions: &context_permissions { contents: write, actions: read }
+    outputs: &outputs
+      source: ${{ steps.context.outputs.source }}
+      complete: ${{ steps.context.outputs.complete }}
+      builder: ${{ steps.context.outputs.builder }}
+      targets: ${{ steps.context.outputs.targets }}
+      kind: ${{ steps.context.outputs.kind }}
+      retention_run: ${{ steps.context.outputs.retention_run }}
+      retention_attempt: ${{ steps.context.outputs.retention_attempt }}
+      retention_name: ${{ steps.context.outputs.retention_name }}
+      state_attempt: ${{ github.run_attempt }}
+      signing_keystore_secret: ${{ steps.context.outputs.signing_keystore_secret }}
+      signing_store_secret: ${{ steps.context.outputs.signing_store_secret }}
+      signing_alias_secret: ${{ steps.context.outputs.signing_alias_secret }}
+      signing_key_secret: ${{ steps.context.outputs.signing_key_secret }}
+    steps: &environment_steps
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: &toolkit { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: &node { node-version: '24' }
+      - run: &install npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - run: node .toolkit/bin/expo-release.mjs setup
+      - id: context
+        run: node .toolkit/bin/artifact-worker.mjs context
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RELEASE_ID: ${{ inputs.release-id }}
+          RELEASE_TARGET: ${{ inputs.target }}
+          RELEASE_ACTION: ${{ inputs.action }}
+          RELEASE_RETRY_STAGE: ${{ inputs.retry-stage }}
+      - if: steps.context.outputs.complete != 'true' && steps.context.outputs.retention_run == ''
+        run: node .toolkit/bin/artifact-worker.mjs target-environment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RELEASE_ID: ${{ inputs.release-id }}
+          RELEASE_TARGET: ${{ inputs.target }}
+          RELEASE_ACTION: ${{ inputs.action }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - if: steps.context.outputs.complete != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: 'target-context-${{ inputs.target }}-${{ github.run_attempt }}', path: .release-state, if-no-files-found: error }
+  approved-environment:
+    if: inputs.approval != ''
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.approval }}
+    permissions: *context_permissions
+    outputs: *outputs
+    steps: *environment_steps
+  cloud-intent:
+    needs: [environment, approved-environment]
+    if: >-
+      always() && !cancelled() && (needs.environment.result == 'success' || needs.approved-environment.result == 'success') &&
+      (needs.environment.outputs.builder || needs.approved-environment.outputs.builder) == 'eas' &&
+      (needs.environment.outputs.retention_run || needs.approved-environment.outputs.retention_run) == '' &&
+      (needs.environment.outputs.complete || needs.approved-environment.outputs.complete) != 'true'
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read }
+    outputs: { mode: '${{ steps.intent.outputs.mode }}', producer_attempt: '${{ steps.intent.outputs.producer_attempt }}', producer_run: '${{ steps.intent.outputs.producer_run }}', state_attempt: '${{ github.run_attempt }}' }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: *toolkit
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: *node
+      - run: *install
+      - run: node .toolkit/bin/expo-release.mjs setup
+      - id: intent
+        run: node .toolkit/bin/artifact-worker.mjs cloud-begin
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RELEASE_ID: ${{ inputs.release-id }}
+          RELEASE_TARGET: ${{ inputs.target }}
+          RELEASE_ACTION: ${{ inputs.action }}
+          RELEASE_RETRY_STAGE: ${{ inputs.retry-stage }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: 'cloud-intent-${{ inputs.target }}-${{ github.run_attempt }}', path: .release-state/cloud-intent.json, if-no-files-found: error }
+  source:
+    needs: [environment, approved-environment, cloud-intent]
+    if: >-
+      always() && !cancelled() && inputs.signing-environment == '' &&
+      (needs.environment.result == 'success' || needs.approved-environment.result == 'success') &&
+      (needs.environment.outputs.complete || needs.approved-environment.outputs.complete) != 'true' &&
+      (needs.environment.outputs.retention_run || needs.approved-environment.outputs.retention_run) == '' &&
+      ((needs.environment.outputs.builder || needs.approved-environment.outputs.builder) != 'eas' || needs.cloud-intent.outputs.mode == 'enqueue')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions: &read { contents: read, actions: read }
+    outputs: &artifact_outputs { artifact_attempt: '${{ github.run_attempt }}' }
+    steps: &source_steps
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: *toolkit
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { ref: '${{ needs.environment.outputs.source || needs.approved-environment.outputs.source }}', fetch-depth: 0, persist-credentials: false, path: .app }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: *node
+      - run: *install
+      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'target-context-${{ inputs.target }}-${{ needs.environment.outputs.state_attempt || needs.approved-environment.outputs.state_attempt }}', path: .release-state }
+      - if: (needs.environment.outputs.builder || needs.approved-environment.outputs.builder) == 'eas'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'cloud-intent-${{ inputs.target }}-${{ needs.cloud-intent.outputs.state_attempt }}', path: .release-state }
+      - run: node .toolkit/bin/worker.mjs install
+      - if: (needs.environment.outputs.kind || needs.approved-environment.outputs.kind) == 'server'
+        run: sudo apt-get update -qq && sudo apt-get install -y skopeo
+      - if: (needs.environment.outputs.builder || needs.approved-environment.outputs.builder) == 'command'
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with: { distribution: temurin, java-version: '17' }
+      - if: (needs.environment.outputs.builder || needs.approved-environment.outputs.builder) == 'command'
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with: { cmdline-tools-version: '15859902', packages: 'platform-tools build-tools;36.0.0' }
+      - if: (needs.environment.outputs.builder || needs.approved-environment.outputs.builder) == 'command'
+        run: node .toolkit/bin/android-tools.mjs
+      - if: (needs.environment.outputs.kind || needs.approved-environment.outputs.kind) == 'server'
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435
+      - if: (needs.environment.outputs.builder || needs.approved-environment.outputs.builder) == 'command'
+        run: node .toolkit/bin/artifact-worker.mjs source-prepare
+      - if: (needs.environment.outputs.builder || needs.approved-environment.outputs.builder) != 'eas'
+        run: node .toolkit/bin/artifact-worker.mjs source-build
+        env:
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets[needs.environment.outputs.signing_keystore_secret || needs.approved-environment.outputs.signing_keystore_secret] }}
+          ANDROID_STORE_PASSWORD: ${{ secrets[needs.environment.outputs.signing_store_secret || needs.approved-environment.outputs.signing_store_secret] }}
+          ANDROID_KEY_ALIAS: ${{ secrets[needs.environment.outputs.signing_alias_secret || needs.approved-environment.outputs.signing_alias_secret] }}
+          ANDROID_KEY_PASSWORD: ${{ secrets[needs.environment.outputs.signing_key_secret || needs.approved-environment.outputs.signing_key_secret] }}
+      # EAS cloud builds intentionally evaluate application configuration with Expo authentication.
+      - if: (needs.environment.outputs.builder || needs.approved-environment.outputs.builder) == 'eas'
+        run: node .toolkit/bin/artifact-worker.mjs cloud-enqueue
+        env: { EXPO_TOKEN: '${{ secrets.EXPO_TOKEN }}' }
+      - if: always() && (needs.environment.outputs.builder || needs.approved-environment.outputs.builder) == 'eas'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: 'cloud-accepted-${{ inputs.target }}-${{ github.run_attempt }}', path: .release-state/cloud-accepted.json, if-no-files-found: warn }
+      - if: (needs.environment.outputs.kind || needs.approved-environment.outputs.kind) == 'server'
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
+        with:
+          input: .release-artifacts/${{ inputs.target }}/files/image.oci.tar
+          format: table
+          scanners: vuln
+          vuln-type: os
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: '1'
+      - if: (needs.environment.outputs.builder || needs.approved-environment.outputs.builder) != 'eas'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: 'artifact-${{ inputs.target }}-${{ github.run_attempt }}', path: .release-artifacts, if-no-files-found: error, include-hidden-files: true, retention-days: 30 }
+  signed-source:
+    needs: [environment, approved-environment, cloud-intent]
+    if: >-
+      always() && !cancelled() && inputs.signing-environment != '' &&
+      (needs.environment.result == 'success' || needs.approved-environment.result == 'success') &&
+      (needs.environment.outputs.retention_run || needs.approved-environment.outputs.retention_run) == '' &&
+      (needs.environment.outputs.complete || needs.approved-environment.outputs.complete) != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: ${{ inputs.signing-environment }}
+    permissions: *read
+    outputs: *artifact_outputs
+    steps: *source_steps
+  cloud-observe:
+    needs: [environment, approved-environment, cloud-intent, source]
+    if: always() && !cancelled() && needs.cloud-intent.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions: { contents: write, actions: read }
+    outputs: *artifact_outputs
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: *toolkit
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: *node
+      - run: *install
+      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: 'target-context-${{ inputs.target }}-${{ needs.environment.outputs.state_attempt || needs.approved-environment.outputs.state_attempt }}', path: .release-state }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        continue-on-error: true
+        with: { name: 'cloud-accepted-${{ inputs.target }}-${{ needs.cloud-intent.outputs.producer_attempt }}', run-id: '${{ needs.cloud-intent.outputs.producer_run }}', github-token: '${{ github.token }}', path: .release-state }
+      - run: node .toolkit/bin/artifact-worker.mjs cloud-monitor
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RELEASE_ID: ${{ inputs.release-id }}
+          RELEASE_TARGET: ${{ inputs.target }}
+          RELEASE_ACTION: build
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: 'artifact-${{ inputs.target }}-${{ github.run_attempt }}', path: .release-artifacts, if-no-files-found: error, include-hidden-files: true, retention-days: 30 }
+  restore-retention:
+    needs: [environment, approved-environment]
+    if: >-
+      always() && !cancelled() && (needs.environment.result == 'success' || needs.approved-environment.result == 'success') &&
+      (needs.environment.outputs.retention_run || needs.approved-environment.outputs.retention_run) != ''
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read, attestations: read }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: *toolkit
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: *node
+      - run: *install
+      - run: node .toolkit/bin/expo-release.mjs setup
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.environment.outputs.retention_name || needs.approved-environment.outputs.retention_name }}
+          run-id: ${{ needs.environment.outputs.retention_run || needs.approved-environment.outputs.retention_run }}
+          github-token: ${{ github.token }}
+          path: .release-artifacts
+      - run: node .toolkit/bin/artifact-worker.mjs retain
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RELEASE_ID: ${{ inputs.release-id }}
+          RELEASE_TARGET: ${{ inputs.target }}
+          RELEASE_TARGETS: ${{ needs.environment.outputs.targets || needs.approved-environment.outputs.targets }}
+          RELEASE_ACTION: ${{ inputs.action }}
+          ARTIFACT_RUN_ID: ${{ needs.environment.outputs.retention_run || needs.approved-environment.outputs.retention_run }}
+          ARTIFACT_RUN_ATTEMPT: ${{ needs.environment.outputs.retention_attempt || needs.approved-environment.outputs.retention_attempt }}
+          ARTIFACT_NAME: ${{ needs.environment.outputs.retention_name || needs.approved-environment.outputs.retention_name }}
+  attest:
+    needs: [environment, approved-environment, source, signed-source, cloud-observe]
+    if: >-
+      always() && !cancelled() && (needs.cloud-observe.result == 'success' || needs.signed-source.result == 'success' ||
+      ((needs.environment.outputs.builder || needs.approved-environment.outputs.builder) != 'eas' && needs.source.result == 'success'))
+    permissions: { contents: write, actions: read, id-token: write, attestations: write }
+    uses: ./.github/workflows/release-attest.yml
+    with:
+      release-id: ${{ inputs.release-id }}
+      target: ${{ inputs.target }}
+      targets: ${{ needs.environment.outputs.targets || needs.approved-environment.outputs.targets }}
+      action: ${{ inputs.action }}
+      artifact-attempt: ${{ needs.cloud-observe.outputs.artifact_attempt || needs.signed-source.outputs.artifact_attempt || needs.source.outputs.artifact_attempt }}
+      artifact-name: artifact-${{ inputs.target }}-${{ needs.cloud-observe.outputs.artifact_attempt || needs.signed-source.outputs.artifact_attempt || needs.source.outputs.artifact_attempt }}
+      context-name: target-context-${{ inputs.target }}-${{ needs.environment.outputs.state_attempt || needs.approved-environment.outputs.state_attempt }}

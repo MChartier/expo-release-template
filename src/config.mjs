@@ -1,0 +1,94 @@
+/** @file Validate the declarative consumer boundary before invoking hooks or provider transports. */
+import fs from 'node:fs';
+import Ajv from 'ajv';
+import path from 'node:path';
+import { invariant, validateId } from '../packages/release-engine/index.mjs';
+import { validatePromotions } from './promotion-config.mjs';
+
+const ajv = new Ajv({ allErrors: true, strict: false });
+const schema = JSON.parse(fs.readFileSync(new URL('../schemas/release.config.schema.json', import.meta.url), 'utf8'));
+const validateShape = ajv.compile(schema);
+
+/** Resolve a repository-relative path without admitting traversal, absolute paths, or Windows aliases. */
+export function repositoryPath(root, relative) {
+  invariant(typeof relative === 'string' && relative.length > 0 && !relative.includes('\\') && !relative.includes(':')
+    && !relative.startsWith('/') && relative.split('/').every(part => part && part !== '.' && part !== '..'), 'Expected a repository-relative path.');
+  const result = path.resolve(root, relative);
+  invariant(result.startsWith(`${path.resolve(root)}${path.sep}`), 'Repository path escapes its root.');
+  return result;
+}
+
+/** Validate supported component capabilities; application names never select implementation branches. */
+export function validateConfig(config) {
+  invariant(validateShape(config), `Invalid release configuration: ${ajv.errorsText(validateShape.errors)}.`);
+  invariant(config.components.filter(component => component.kind === 'server').length <= 1, 'The supported pipeline has one optional server component.');
+  const ids = new Set();
+  for (const component of config.components) {
+    invariant(!ids.has(component.id), `Duplicate component ${component.id}.`);
+    ids.add(component.id);
+    if (component.approvalEnvironment && typeof component.approvalEnvironment === 'object') {
+      invariant(!Array.isArray(component.approvalEnvironment) && Object.entries(component.approvalEnvironment).every(([profile, name]) =>
+        Object.hasOwn(config.profiles ?? {}, profile) && typeof name === 'string' && (!name || /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(name))), 'Invalid profile approval environment.');
+      for (const profile of component.profiles ?? Object.keys(config.profiles ?? {})) invariant(Object.hasOwn(component.approvalEnvironment, profile), 'Specify an approval environment for each applicable profile.');
+    }
+    if (component.kind === 'native') {
+      invariant(!component.signingEnvironment || component.builder === 'command', 'A separate signing environment applies only to command builders; EAS owns cloud signing.');
+      invariant(!component.localBuilder || component.localBuilder === 'command' || component.localBuilder === 'eas' && component.platform === 'ios', 'Unsupported local native builder.');
+      invariant(component.localBuilder !== 'eas' || !component.buildGroup, 'Local iOS EAS builds cannot share a command build group.');
+      invariant(component.runtimeCompatibility !== 'fingerprint' || component.runtimePolicy === 'fingerprint', 'Fingerprint compatibility requires fingerprint runtime policy.');
+    }
+    if (component.kind === 'ota') {
+      invariant(component.nativeTarget, `OTA ${component.id} requires a native target.`);
+      const profiles = component.profiles ?? Object.keys(config.profiles ?? {});
+      const resolved = profiles.length ? profiles.map(name => ({ ...config.profiles[name], ...component })) : [component];
+      invariant(resolved.every(value => value.channel && value.environment), `OTA ${component.id} requires a channel and environment in each applicable profile.`);
+    }
+    if (component.appDirectory && component.appDirectory !== '.') repositoryPath(process.cwd(), component.appDirectory);
+    if (component.version) {
+      repositoryPath(process.cwd(), component.version.file);
+      invariant(component.version.pointer?.startsWith('/'), 'Version mapping needs a JSON pointer.');
+      if (component.version.codePointer) invariant(component.version.codePointer.startsWith('/'), 'Code mapping needs a JSON pointer.');
+    }
+  }
+  for (const component of config.components) {
+    if (component.kind === 'ota') invariant(config.components.some(target => target.id === component.nativeTarget && target.kind === 'native' && target.platform === component.platform), `Unknown native target for ${component.id}.`);
+    if (component.runtimeBinding === 'source') invariant(component.kind === 'ota' && config.components.find(value => value.id === component.nativeTarget)?.runtimePolicy === 'fingerprint', 'Source runtime binding requires fingerprint native policy.');
+    for (const id of component.after ?? []) {
+      const predecessor = config.components.find(value => value.id === id);
+      invariant(predecessor && id !== component.id, `Invalid predecessor ${id}.`);
+      invariant(['native', 'ota'].includes(component.kind) && predecessor.kind === component.kind,
+        'Publication predecessors must sequence native targets or OTA channels of the same kind.');
+    }
+  }
+  for (const group of config.nativeGroups ?? []) invariant(Array.isArray(group) && group.length > 1
+    && group.every(id => config.components.some(component => component.id === id && component.kind === 'native')), 'Native groups must contain configured native targets.');
+  for (const dependency of config.dependencies ?? []) invariant(ids.has(dependency.component) && Array.isArray(dependency.requires)
+    && dependency.requires.every(id => ids.has(id)), 'Unknown component dependency.');
+  const versionGroups = new Set(); const versionTargets = new Set();
+  for (const group of config.versionGroups ?? []) {
+    validateId(group.id);
+    invariant(!versionGroups.has(group.id), 'Duplicate version group.'); versionGroups.add(group.id);
+    invariant(Array.isArray(group.targets) && group.targets.length && group.targets.every(id => ids.has(id)), 'Invalid version group targets.');
+    invariant(Object.keys(group.minimumCodes ?? {}).every(id => group.targets.includes(id)
+      && config.components.some(component => component.id === id && component.kind === 'native')), 'Build-number floors must name native targets in their version group.');
+    for (const id of group.targets) { invariant(!versionTargets.has(id), 'Each target must belong to at most one version group.'); versionTargets.add(id); }
+    for (const lane of Object.values(group.lanes ?? {})) invariant(Number.isSafeInteger(lane.modulus) && lane.modulus > 0
+      && Number.isSafeInteger(lane.residue) && lane.residue >= 0 && lane.residue < lane.modulus, 'Invalid native code lane.');
+  }
+  if (config.defaultProfile) invariant(Object.hasOwn(config.profiles ?? {}, config.defaultProfile), 'Default profile is not configured.');
+  return validatePromotions(config);
+}
+
+/** Read configuration as data; privileged workers never import executable consumer configuration. */
+export function readConfig(root = process.cwd(), file = 'release.config.json') {
+  return validateConfig(JSON.parse(fs.readFileSync(repositoryPath(root, file), 'utf8')));
+}
+
+/** Read one explicit JSON pointer, rejecting inherited object properties. */
+export function readPointer(value, pointer) {
+  invariant(typeof pointer === 'string' && pointer.startsWith('/'), 'Expected a JSON pointer.');
+  return pointer.slice(1).split('/').map(part => part.replace(/~1/g, '/').replace(/~0/g, '~')).reduce((current, key) => {
+    invariant(current && Object.hasOwn(current, key), `Missing version field ${pointer}.`);
+    return current[key];
+  }, value);
+}

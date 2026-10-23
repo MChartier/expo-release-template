@@ -1,33 +1,29 @@
 # Consumer configuration and migration
 
-The engine standardizes decisions and recovery contracts. Repository adapters retain platform-specific builders, publication transports, environment protections, and historical receipt readers.
+Both applications install the same `@mchartier/expo-release` Git package and pin its reusable workflows to that exact commit. `release.config.json` declares policy; application hooks report source/build facts. Generic selection, versions, orchestration, providers, recovery and deployment live upstream.
 
-| Concern | Little Say | Calibrate | Shared contract |
+| Concern | Little Say | Calibrate | Shared capability |
 | --- | --- | --- | --- |
-| Native targets | Android and iOS; independently selected | Android phone and Wear; selected together | Explicit targets and optional native groups |
-| Native allocation | Selected semantic increment and platform build numbers | Shared automatic patch; globally reserved odd phone/even Wear codes | Monotonic allocation, reused candidate reservations, no allocation on no-op |
-| Server | Container release and existing self-hosted webhook | Server/web container, existing webhook, runtime contract guard | Compare a verified server baseline; deploy only when selected |
-| Native/server dependency | Repository's effective input identity decides | Paired version metadata changes shipped server diagnostics | Declare real artifact dependencies; do not hide shipped metadata |
-| OTA destinations | Per profile, platform, and supported compatible runtime | Independently tracked internal and production phone OTA | Fingerprint compatibility plus a separate bundle/environment baseline |
-| Store sequencing | Exact selected Android/iOS builds for store distribution | Verified phone enqueue, phone completion, then Wear submission | Successful native artifact before enqueue; verified enqueue before OTA; completion required before final success |
-| Android testing destinations | Existing `internal` track with draft release status | Owner-confirmed `internal` and `wear:internal` IDs | Read back exact configured IDs; never infer API aliases from display labels |
-| Production protection | Repository's distribution and credential configuration | Existing protected production OTA approval and explicit store promotion | Keep approval and credential policy in repository adapters |
-| Publication transport | Existing hosted EAS command jobs; source subprocess environments exclude publication tokens | Credential-free export jobs and separate trusted artifact publishers | Provider adapters own credentials; engine code requires none |
-| Recovery storage | Append-only assets in run-scoped draft GitHub Releases | Run-scoped retained artifacts and append-only checkpoints | Original immutable plan, exact bytes, provider IDs, explicit unknown-outcome reconciliation |
-| Historical records | Legacy appVersion and local/cloud baseline readers | Historical image signer/provenance and release readers | New schemas do not rewrite or reinterpret old evidence |
+| Native targets | Independently selected Android and iOS | Paired Android phone/Wear | Optional native groups and target dependencies |
+| Hosted builders | EAS cloud builds | Configured native command builders | Common source/build/retention boundaries |
+| Native versions | Requested semantic increment; independent selected-platform counters | Shared patch; globally reserved odd/even phone/Wear codes | Declarative mappings, mirrors and code lanes |
+| Runtime policy | Existing appVersion policy and exact native fingerprints | Existing fingerprint policy | Explicit policy, full native proof and retained-runtime history |
+| OTA | Per profile/platform and all supported compatible runtimes | Internal source-validated behavior; production exact native binding | Explicit per-target runtime binding policy |
+| Store destinations | Existing internal/draft Android and explicit iOS app | Explicit phone and Wear track IDs | Exact artifact/build association and destination verification |
+| Sequencing | Verified selected native handoff before dependent OTA | Phone completion before Wear submission | Shared graph dependencies, independent monitoring |
+| Server | Global server history; server/OTA deployment prerequisite | Native metadata can select server; server-only deployment policy | Global image baseline, generated metadata dependency, declarative deployment policy |
+| Protection | Existing distribution and secret boundaries | Existing Android signing, production OTA and promotion protections | Named secrets, environment approvals and fixed shared jobs |
 
-Little Say's application configuration remains in `release.json`, `native-release.json`, `release-policy.json`, and its EAS profiles. Its adapter is `scripts/release/`. Calibrate's shared-engine configuration is `scripts/release-engine.config.mjs`; its adapter is `scripts/release-engine.mjs`, with application versions, destinations, and protections supplied by the existing release configuration.
+Consumer implementations retain app input calculation, runtime/API contract checks, binary verification and any platform commands not yet represented by a shared builder. They must not rebuild graphs, poll providers, rewrite generic ledgers or reproduce the shared workflow topology.
 
-Both consumers vendor the exact engine bytes under `tools/release-engine/`, record their source revision in `release-engine.lock.json`, and use a commit-pinned verification action and reusable contract-test workflow. This keeps privileged and sparse-checkout workers reproducible without a registry token. A toolkit update is an explicit reviewed consumer change, not a floating dependency.
+The repository's held releases and protected environments remain operator controlled. Migration does not dispatch recovery, change a destination, merge a candidate, deploy a server, submit a binary or publish OTA. Validation distinguishes synthetic/provider fixtures from live provider readback and physical-device checks.
 
-The shared library does not create a credential boundary by itself. Little Say retains its hosted EAS transport, including export and publication in the same job; excluding tokens from source subprocess environments is not equivalent to Calibrate's separate export and publisher runners. New adapters should use the separated artifact-worker model in the adapter contract.
+## Third consumer
 
-Calibrate's rollout exposed adapter requirements now included in the shared contract: stable fingerprints after compiler-generated files appear, exact named-artifact extraction paths, original-run recovery after interrupted retention, isolated draft-release inspection, and explicit reconciliation of a rejected request before correcting its destination. These checks preserve completed server work and retained native binaries while publication remains paused. Repository rollout records, rather than this template, own the current source, version reservations, provider IDs, and historical signer allowlist.
+The [Expo-only starter](../examples/expo-only/README.md) uses a real declarative config and source-hook protocol with the canonical `planRelease` API. Its Android app has no server, Wear, deployment, signing-key download or store requirement. Tests cover first release, no-op, JavaScript-only change, native change, environment change, version allocation and an original Android-only appVersion runtime overlay. No application-name conditional exists in the shared planner.
 
-## Add another Expo app
+Add components or approval environments only when the application's contract requires them. A consumer changing from appVersion to fingerprint runtimes needs a separately reviewed native migration and explicit supported/retired history; changing the string cannot make an installed binary compatible.
 
-Start with the serverless `examples/expo-only.mjs` and its tests. Add a server, store handoff, native group, or production approval only when the new application's release contract needs it. Keep app identifiers, store tracks, environment names, build commands, and credentials out of the shared engine.
+## Adoption acceptance
 
-Before enabling publication, implement provider adapters that prove the selected source, destination, and artifact identity. Test an unchanged cut, OTA-only change, native-only input change, server-only change if applicable, and interrupted publication with a lost response. A new native runtime must have a matching OTA target even if its JavaScript source has not changed. A later store failure must leave successful OTA evidence intact while the overall release remains incomplete.
-
-Migrating an installed app from `appVersion` to fingerprint runtimes requires a new native installation. Retain the historical records and apply the application's explicit supported/retired runtime policy; changing a runtime string cannot make an existing binary compatible.
+Compare authored release implementation/configuration and YAML against the pre-adoption consumer baseline. Include relocated files, tests and documentation; report generated npm lockfiles separately. Removing a copied engine alone does not demonstrate that orchestration moved upstream. Preserve application behavior with actual source-input fixtures, old/new planner comparisons, successful independent-stage recovery, exact retained bytes, and clean installed-package tests.

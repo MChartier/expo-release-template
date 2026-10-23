@@ -75,7 +75,10 @@ export function validateSourceIdentity(source) {
   invariant(source && typeof source === 'object' && !Array.isArray(source), 'Plan source is required.');
   invariant(typeof source.repository === 'string' && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(source.repository), 'Source repository must be owner/repository.');
   invariant(source.repository.split('/').every((part) => part !== '.' && part !== '..'), 'Source repository cannot use path aliases.');
-  for (const key of ['commit', 'workflowCommit', 'toolkitCommit']) {
+  const keys = ['commit', 'toolkitCommit'];
+  if (source.origin === 'local') invariant(source.workflowCommit === undefined, 'Local source cannot claim workflow provenance.');
+  else keys.push('workflowCommit');
+  for (const key of keys) {
     invariant(typeof source[key] === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(source[key]), `Source ${key} must be a full lowercase Git SHA.`);
   }
   return immutable(source);

@@ -1,0 +1,22 @@
+# Unprivileged request recording; the default-branch handler independently verifies this exact run and request.
+name: Record release request
+on:
+  workflow_call:
+    inputs:
+      request: { type: string, required: true }
+permissions: { contents: read }
+jobs:
+  request:
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - run: npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - run: node .toolkit/bin/expo-release.mjs setup
+      - run: node .toolkit/bin/worker.mjs request
+        env: { RELEASE_REQUEST: '${{ inputs.request }}' }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: expo-release-request, path: .release-state/request.json, if-no-files-found: error, retention-days: 7 }

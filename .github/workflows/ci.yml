@@ -1,4 +1,4 @@
-# Validates shared release policy, artifact boundaries, and consumer synchronization on Windows and Linux.
+# Validates the shared package, release behavior and installed distribution on Windows and Linux.
 name: Check
 on:
   pull_request:
@@ -13,7 +13,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -21,4 +21,18 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/generate-types.mjs --check
+      - run: npx --no-install tsc --noEmit --module nodenext --moduleResolution nodenext --target es2022 src/index.d.mts
       - run: npm test
+        env:
+          EXPO_RELEASE_INSTALL_TEST: '1'
+          EXPO_RELEASE_TEST_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  engine-node20:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '20' }
+      - run: node --test packages/release-engine/test/*.test.mjs

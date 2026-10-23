@@ -1,0 +1,18 @@
+# Provider dependency maintenance is separate from release and pull-request gates.
+name: Dependency maintenance
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 13 * * 1'
+permissions: { contents: read }
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - run: npm audit --package-lock-only --omit=dev --audit-level=high
+      - run: npm audit --prefix toolchain --package-lock-only --omit=dev --audit-level=high

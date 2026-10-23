@@ -1,0 +1,49 @@
+# Deployment credentials enter only the source-free transport after its configured approval environment.
+name: Deploy selected release
+on:
+  workflow_call:
+    inputs:
+      release-id: { type: string, required: true }
+      target: { type: string, required: true }
+      approval: { type: string, required: true }
+      retry-stage: { type: string, default: '' }
+    secrets:
+      DEPLOY_WG_ENDPOINT: { required: false }
+      DEPLOY_WG_PRIVATE_KEY: { required: false }
+      DEPLOY_TOKEN: { required: false }
+permissions: { contents: read }
+jobs:
+  deploy:
+    if: inputs.approval == ''
+    runs-on: ubuntu-latest
+    permissions: &permissions { contents: write, actions: read }
+    steps: &deploy_steps
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: MChartier/expo-release-template, ref: '${{ job.workflow_sha }}', persist-credentials: false, path: .toolkit }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '24' }
+      - run: npm ci --prefix .toolkit --ignore-scripts --no-audit --no-fund
+      - run: node .toolkit/bin/expo-release.mjs setup
+      - run: sudo apt-get update && sudo apt-get install --no-install-recommends -y wireguard-tools
+      - run: node .toolkit/bin/artifact-worker.mjs publish
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CONSUMER_WORKFLOW_COMMIT: ${{ github.workflow_sha }}
+          TOOLKIT_COMMIT: ${{ job.workflow_sha }}
+          RELEASE_ID: ${{ inputs.release-id }}
+          RELEASE_TARGET: ${{ inputs.target }}
+          RELEASE_ACTION: deploy
+          RELEASE_RETRY_STAGE: ${{ inputs.retry-stage }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+          DEPLOY_WG_ADDRESS: ${{ vars.DEPLOY_WG_ADDRESS }}
+          DEPLOY_WG_PUBLIC_KEY: ${{ vars.DEPLOY_WG_PUBLIC_KEY }}
+          DEPLOY_WG_ENDPOINT: ${{ secrets.DEPLOY_WG_ENDPOINT }}
+          DEPLOY_WG_PRIVATE_KEY: ${{ secrets.DEPLOY_WG_PRIVATE_KEY }}
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+  approved-deploy:
+    if: inputs.approval != ''
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.approval }}
+    permissions: *permissions
+    steps: *deploy_steps

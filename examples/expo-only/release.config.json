@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "repository": "example/expo-only",
+  "defaultBranch": "main",
+  "defaultProfile": "internal",
+  "profiles": { "internal": { "easProfile": "internal", "channel": "internal", "environment": "preview", "distribution": "internal", "submit": false } },
+  "expo": { "projectId": "00000000-0000-4000-8000-000000000001", "owner": "example", "slug": "expo-only", "environmentPolicy": { "readableStringsOnly": true, "allowedNames": [] } },
+  "components": [
+    { "id": "android", "kind": "native", "platform": "android", "builder": "eas", "appDirectory": ".", "applicationId": "com.example.expoonly", "runtimePolicy": "appVersion", "version": { "file": "app.json", "pointer": "/expo/version", "codePointer": "/expo/android/versionCode" } },
+    { "id": "android.ota", "kind": "ota", "platform": "android", "nativeTarget": "android", "appDirectory": "." }
+  ],
+  "versionGroups": [{ "id": "native", "targets": ["android"], "bump": "requested", "version": { "file": "app.json", "pointer": "/expo/version" } }],
+  "hooks": {
+    "inspect": { "command": ["node", "release-hooks.mjs"] },
+    "validate": { "command": ["node", "release-hooks.mjs"] },
+    "build": { "command": ["node", "release-hooks.mjs"] },
+    "verify": { "command": ["node", "release-hooks.mjs"] }
+  },
+  "github": { "requestWorkflow": "release-request.yml", "handlerWorkflow": "release-handler.yml", "recoveryWorkflow": "recover-release.yml" }
+}
