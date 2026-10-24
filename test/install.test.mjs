@@ -12,7 +12,7 @@ test('package installs directly from a full Git SHA with executable CLI and Expo
   for(const file of ['src','bin','schemas','package.json','package-lock.json'])fs.cpSync(path.join(root,file),path.join(source.root,file),{recursive:true});
   const sha=source.commit();
   writeJson(path.join(consumer,'package.json'),{name:'clean-install',private:true,devDependencies:{'@mchartier/expo-release':`git+${pathToFileURL(source.root).href}#${sha}`}});
-  run('npm',['install','--ignore-scripts','--no-audit','--no-fund','--offline'],{cwd:consumer});
+  run('npm',['install','--ignore-scripts','--no-audit','--no-fund'],{cwd:consumer});
   const installed=readJson(path.join(consumer,'node_modules/@mchartier/expo-release/package.json'));
   assert.equal(installed.version,'3.0.0');assert.deepEqual(Object.keys(installed.dependencies),['ajv']);assert.equal(installed.scripts.prepare,undefined);
   assert.match(run(process.execPath,['node_modules/@mchartier/expo-release/bin/expo-release.mjs','--help'],{cwd:consumer}),/plan --profile/);
