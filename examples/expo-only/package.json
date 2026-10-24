@@ -1,0 +1,8 @@
+{
+  "name": "expo-release-serverless-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "dependencies": { "expo": "57.0.7", "expo-updates": "57.0.8", "react": "19.2.3", "react-native": "0.86.3" },
+  "devDependencies": { "@expo/fingerprint": "0.20.13" }
+}

@@ -1,180 +1,88 @@
-/** @file Validate nested reusable-worker permissions, secret routing, approvals and canonical stage execution without publication credentials. */
-import fs from 'node:fs';
-import path from 'node:path';
-import assert from 'node:assert/strict';
+/** @file Check actual workflow dependencies, permission boundaries and supported upstream setup. */
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
-import { parse } from 'yaml';
-import { phaseMatrices, verifyRunReservation } from '../src/worker.mjs';
-import { signingSecretNames } from '../src/artifact-worker.mjs';
-import { planRelease, completedBaseline } from '../src/planner.mjs';
-import { validateConfig } from '../src/config.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import YAML from 'yaml';
+const workflow = YAML.parse(fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8'));
+const setup = YAML.parse(fs.readFileSync(new URL('../.github/actions/setup/action.yml', import.meta.url), 'utf8'));
+const jobs = workflow.jobs;
 
-const root = fileURLToPath(new URL('../', import.meta.url));
-const files = fs.readdirSync(path.join(root, '.github/workflows')).filter(file => file.endsWith('.yml'));
-const workflows = Object.fromEntries(files.map(file => [file, parse(fs.readFileSync(path.join(root, '.github/workflows', file), 'utf8'))]));
-const rank = { none: 0, read: 1, write: 2 };
+/** Read the fixed prerequisites from a GitHub job. */
+function needs(name) { return [jobs[name].needs ?? []].flat(); }
 
-test('source jobs receive signing names only for configured command Android builds', () => {
-  const signing = { variables: { file: 'APP_KEY' } };
-  for (const component of [{ kind: 'server' }, { kind: 'ota' }, { kind: 'native', builder: 'eas', platform: 'android', signing },
-    { kind: 'native', builder: 'command', platform: 'ios', signing }, { kind: 'native', builder: 'command', platform: 'android' }]) {
-    assert(Object.values(signingSecretNames(component)).every(value => value === ''));
-  }
-  assert.equal(signingSecretNames({ kind: 'native', builder: 'command', platform: 'android', signing }).signing_keystore_secret, 'ANDROID_KEYSTORE_BASE64');
+test('the single reusable release workflow has fixed jobs and repository serialization', () => {
+  assert.ok(workflow.on.workflow_call); assert.equal(workflow.concurrency['cancel-in-progress'], false);
+  assert.deepEqual(Object.keys(workflow.on.workflow_call.inputs), ['profile', 'rebuild']);
+  for (const name of ['prepare', 'reserve', 'server-build', 'server-publish', 'server-deploy', 'native-start', 'native-build', 'native-record', 'native-submit', 'ota-export', 'ota-publish']) assert.ok(jobs[name]);
+  assert.ok(!JSON.stringify(workflow).includes('workflow_run'));
 });
 
-test('whole-run retries retain original reservation identity and reject changed requested targets', () => {
-  const config = { schemaVersion: 1, repository: 'fixture/app', defaultBranch: 'main', components: [{ id: 'server', kind: 'server' }] };
-  const origin = { kind: 'github', runId: '123', runAttempt: 1 };
-  const source = { repository: config.repository, commit: 'a'.repeat(40), workflowCommit: 'a'.repeat(40), toolkitCommit: 'b'.repeat(40) };
-  const plan = planRelease({ config, source, origin, profile: '', operation: 'build', targets: ['server'], observations: [{ id: 'server', identity: 'source' }] });
-  const authorized = { config, source, request: { action: 'release', operation: 'build', profile: '', targets: ['server'] } };
-  assert.equal(verifyRunReservation({ plan, reservation: plan }, authorized, { ...origin, runAttempt: 2 }), plan);
-  assert.throws(() => verifyRunReservation({ plan }, { ...authorized, request: { ...authorized.request, targets: [] } }, { ...origin, runAttempt: 2 }), /selection/);
-  assert.throws(() => verifyRunReservation({ plan }, authorized, { ...origin, runId: '124' }), /original run/);
+test('reservation precedes every build and external operation', () => {
+  for (const name of ['server-build','native-start','ota-export']) assert.ok(needs(name).includes('reserve'));
+  assert.ok(needs('reserve').includes('prepare'));
+  assert.ok(needs('server-publish').includes('server-build'));
+  assert.ok(needs('server-deploy').includes('server-publish'));
+  assert.ok(needs('native-build').includes('native-start'));
+  assert.ok(needs('native-start').includes('server-deploy'));
+  assert.match(jobs['native-start'].if, /server != 'true'.*server-deploy.result == 'success'/);
 });
 
-test('every nested call exists, forwards declared secrets explicitly, and propagates all required permissions', () => {
-  for (const [file, workflow] of Object.entries(workflows)) for (const [name, job] of Object.entries(workflow.jobs)) {
-    assert.notEqual(job.secrets, 'inherit', `${file}/${name} implicitly forwards credentials`);
-    if (!job.uses?.startsWith('./.github/workflows/')) continue;
-    const called = workflows[path.basename(job.uses)]; assert(called, `${file}/${name} points to a missing worker`);
-    assert(!job.environment && !job.steps && !job['runs-on'], 'A reusable caller cannot define worker-only properties');
-    for (const key of Object.keys(job.with ?? {})) assert(Object.hasOwn(called.on.workflow_call.inputs ?? {}, key), `${file}/${name} passes an unsupported input ${key}`);
-    for (const key of Object.keys(job.secrets ?? {})) assert(Object.hasOwn(called.on.workflow_call.secrets ?? {}, key), `${file}/${name} passes an undeclared secret ${key}`);
-    const permissions = job.permissions ?? workflow.permissions ?? {};
-    for (const child of Object.values(called.jobs)) for (const [scope, level] of Object.entries(child.permissions ?? called.permissions ?? {})) {
-      assert((rank[permissions[scope] ?? 'none']) >= rank[level], `${file}/${name} cannot grant ${scope}:${level} to ${job.uses}`);
-    }
-  }
+test('submission waits for native evidence and selected server deployment', () => {
+  assert.ok(needs('native-submit').includes('native-record'));
+  assert.ok(needs('native-submit').includes('server-deploy'));
+  assert.match(jobs['native-submit'].if, /server != 'true'.*server-deploy.result == 'success'/);
+  assert.match(jobs['native-submit'].environment, /submit_environment/);
 });
 
-test('publishers use independently pinned tooling and never install or execute application source', () => {
-  for (const file of ['release-stage.yml', 'release-attest.yml']) for (const job of Object.values(workflows[file].jobs)) {
-    assert(!job.env, 'Installation inherits job-level credentials');
-    for (const step of job.steps ?? []) {
-      if (step.uses?.startsWith('actions/checkout@')) {
-        assert.equal(step.with.repository, 'MChartier/expo-release-template'); assert.equal(step.with.ref, '${{ job.workflow_sha }}');
-        assert.equal(step.with['persist-credentials'], false);
-      }
-      assert(!/worker\.mjs install|source-build|source-prepare|npm ci --prefix \.app|release-hooks/.test(step.run ?? ''), 'Publisher evaluated application source');
-      if (step.run?.includes('npm ci')) assert(!step.env?.EXPO_TOKEN && !step.env?.GH_TOKEN, 'Dependency install received publication credentials');
-    }
-  }
-  assert.equal(workflows['release-stage.yml'].jobs['approved-expo'].environment, '${{ inputs.approval }}');
-  assert.equal(workflows['release-artifact.yml'].jobs['approved-environment'].environment, '${{ inputs.approval }}');
-  assert.equal(workflows['release-artifact.yml'].jobs['signed-source'].environment, '${{ inputs.signing-environment }}');
-  const native = workflows['release-artifact.yml'];
-  for (const name of Object.keys(native.on.workflow_call.secrets).filter(key => key.startsWith('CALIBRATE_ANDROID_'))) {
-    for (const caller of ['release-handler.yml', 'release-components.yml', 'release-recovery.yml']) {
-      assert(Object.hasOwn(workflows[caller].on.workflow_call.secrets, name), `Existing environment secret ${name} was lost in ${caller}`);
-    }
+test('OTA waits for compatible build evidence, not store submission completion', () => {
+  assert.ok(needs('ota-publish').includes('native-record'));
+  assert.ok(!needs('ota-publish').includes('native-submit'));
+  assert.ok(needs('ota-publish').includes('server-deploy'));
+  assert.match(jobs['ota-publish'].if, /native != 'true'.*native-record.result == 'success'/);
+  assert.match(jobs['ota-publish'].if, /server != 'true'.*server-deploy.result == 'success'/);
+});
+
+test('partial matrix failures still record completed native builds', () => {
+  assert.equal(jobs['native-build'].strategy['fail-fast'], false);
+  assert.match(jobs['native-record'].if, /always\(\).*native-start.result == 'success'/);
+  assert.ok(jobs['native-record'].steps.some(step => step.with?.['merge-multiple'] === true));
+});
+
+test('source validation, Docker production and OTA export have no publication credentials', () => {
+  for (const name of ['prepare','server-build','ota-export']) {
+    const text = JSON.stringify(jobs[name]);
+    assert.ok(!text.includes('secrets.')); assert.ok(!text.includes('github.token'));
+    assert.ok(!text.includes('write')); assert.ok(!text.includes('EXPO_TOKEN'));
   }
 });
 
-test('shared provider jobs preserve approvals, read-only image reconciliation and isolated credential setup', () => {
-  const jobs = workflows['release-stage.yml'].jobs;
-  for (const [name, job] of Object.entries(jobs)) {
-    assert.deepEqual(job.steps, jobs.expo.steps);
-    assert.equal(job.environment, name.startsWith('approved-') ? '${{ inputs.approval }}' : undefined);
-    assert.equal(job.permissions.packages, name.includes('image') ? name.includes('observe') ? 'read' : 'write' : undefined);
-    if (name.includes('image')) assert(job.if.includes(`inputs.mode == '${name.includes('observe') ? 'reconcile' : 'run'}'`));
-  }
-  const steps = jobs.expo.steps;
-  const execute = steps.find(step => step.run?.endsWith('worker.mjs stage'));
-  assert.equal(steps.filter(step => step.env).length, 1);
-  assert.equal(steps.find(step => step.uses?.endsWith('/setup')).with.eas, "${{ inputs.provider == 'expo' }}");
-  for (const [key, value] of Object.entries(execute.env)) {
-    if (key.startsWith('DEPLOY_') && value.includes('secrets.')) assert(value.includes("inputs.provider == 'deploy' && inputs.mode == 'run'"));
-    if (['EXPO_TOKEN', 'GHCR_TOKEN', 'RELEASE_ACCESS_TOKEN', 'RELEASE_SERVICE_ACCOUNT'].includes(key)) {
-      assert(value.includes(`inputs.provider == '${key === 'EXPO_TOKEN' ? 'expo' : key === 'GHCR_TOKEN' ? 'image' : 'play'}'`));
-    }
-  }
-  const setup = parse(fs.readFileSync(path.join(root, '.github/actions/setup/action.yml'), 'utf8'));
-  assert(setup.runs.steps.some(step => step.run?.endsWith('expo-release.mjs setup')));
-  assert(setup.runs.steps.every(step => !step.env && !JSON.stringify(step).includes('secrets.')));
+test('separate native steps scope signing and cloud authentication', () => {
+  const steps = jobs['native-build'].steps;
+  const native = steps.find(step => step.run?.endsWith('native-command'));
+  const cloud = steps.find(step => step.run?.endsWith('native-cloud'));
+  assert.deepEqual(Object.keys(native.env).sort(), ['ANDROID_KEYSTORE_BASE64','ANDROID_STORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD'].sort());
+  assert.deepEqual(Object.keys(cloud.env), ['EXPO_TOKEN']);
+  assert.ok(steps.findIndex(step => step.run?.includes('android-tools')) < steps.indexOf(native));
+  assert.ok(jobs['native-build'].environment);
 });
 
-test('new requests and recovery share the scheduler while retained requests bypass source and candidate work', () => {
-  const handler = workflows['release-handler.yml'].jobs; const recovery = workflows['release-recovery.yml'].jobs;
-  assert.equal(handler.components.uses, recovery.components.uses);
-  assert(handler.reserve.if.includes("needs.authorize.outputs.action == 'operation' || needs.plan.result == 'success'"));
-  assert(handler.components.if.includes("needs.authorize.outputs.action == 'operation' || needs.merge.result == 'success'"));
-  assert.equal(handler.components.with.matrices, '${{ needs.reserve.outputs.matrices || needs.merge.outputs.matrices }}');
-  for (const step of handler.reserve.steps.filter(step => /release-(environment|plan)-/.test(step.with?.name ?? ''))) {
-    assert.equal(step.if, "needs.authorize.outputs.action == 'release'");
+test('publishers do not install or execute application dependencies', () => {
+  for (const name of ['server-publish','server-deploy','native-record','native-submit','ota-publish']) {
+    assert.ok(!jobs[name].steps.some(step => step.run?.includes('worker.mjs install')));
+    assert.ok(jobs[name].steps.some(step => step.uses?.includes('download-artifact')) || name === 'server-deploy');
   }
-  assert.equal(recovery.reconcile.uses, './.github/workflows/release-stage.yml');
-  assert.equal(recovery.reconcile.with.mode, 'reconcile');
-  assert.equal(handler.environment.if, "needs.authorize.outputs.action == 'release'");
-  assert(handler.candidate.needs.includes('plan')); assert(handler.merge.needs.includes('validation'));
-  for (const job of Object.values(workflows['release-components.yml'].jobs)) {
-    if (job.strategy) assert(!JSON.stringify(job.strategy).includes('fromJSON(fromJSON('));
+  for (const name of ['server-publish','server-deploy','native-submit','ota-publish']) assert.ok(jobs[name].environment);
+});
+
+test('all artifacts are current-run downloads without arbitrary run or repository inputs', () => {
+  for (const job of Object.values(jobs)) for (const step of job.steps) if (step.uses?.includes('download-artifact')) {
+    for (const key of ['run-id','repository','github-token']) assert.equal(step.with?.[key], undefined);
   }
 });
 
-test('canonical matrices skip successful targets and never publish a build-only operation', () => {
-  const config = { schemaVersion: 1, repository: 'fixture/app', defaultBranch: 'main', components: [
-    { id: 'server', kind: 'server', publication: { movingTag: 'latest' } },
-    { id: 'phone', kind: 'native', builder: 'command', platform: 'android', signingEnvironment: 'signing' },
-    { id: 'ota', kind: 'ota', platform: 'android', nativeTarget: 'phone', channel: 'production', environment: 'production', approvalEnvironment: 'production' }] };
-  const input = { config, source: { repository: config.repository, commit: 'a'.repeat(40), toolkitCommit: 'b'.repeat(40), origin: 'local' },
-    origin: { kind: 'local' }, observations: config.components.map(({ id }) => ({ id, identity: id, version: '1.0.0', runtime: '1.0.0' })) };
-  const build = phaseMatrices(planRelease({ ...input, operation: 'build' }));
-  assert.equal(build.server.length, 1); assert.equal(build.server_publish.length, 0); assert.equal(build.server_finalize.length, 0);
-  assert.equal(build.native_first.length, 0); assert.equal(build.ota_first.length, 0);
-  const resume = phaseMatrices(planRelease(input), ['phone:submit']);
-  assert.equal(resume.server.length, 0); assert.equal(resume.native_builds.length, 0); assert.equal(resume.ota_first.length, 0);
-  assert.deepEqual(resume.native_first, [{ target: 'phone', approval: '' }]);
-  const buildPlan = planRelease({ ...input, operation: 'build' });
-  assert.deepEqual(completedBaseline(buildPlan, Object.keys(buildPlan.stages).map(stage => ({ stage, status: 'complete' }))), buildPlan.baseline);
-});
-
-test('a partially retained cohort resumes the original group leader with every cohort target', () => {
-  const config = { schemaVersion: 1, repository: 'fixture/app', defaultBranch: 'main', nativeGroups: [['phone', 'wear']], components:
-    ['phone', 'wear'].map(id => ({ id, kind: 'native', platform: 'android', builder: 'command', buildGroup: 'pair' })) };
-  const plan = planRelease({ config, source: { repository: config.repository, commit: 'a'.repeat(40), toolkitCommit: 'b'.repeat(40), origin: 'local' },
-    origin: { kind: 'local' }, observations: config.components.map(({ id }) => ({ id, identity: id, version: '1.0.0', runtime: id })) });
-  assert.deepEqual(phaseMatrices(plan, ['wear:build']).native_builds,
-    [{ id: 'pair', target: 'phone', targets: ['phone', 'wear'], builder: 'command', approval: '' }]);
-});
-
-test('OTA scheduling follows native handoff waves and build-only profiles before any candidate is created', () => {
-  const config = { schemaVersion: 1, repository: 'fixture/app', defaultBranch: 'main', components: [
-    { id: 'phone', kind: 'native', platform: 'android', builder: 'command' },
-    { id: 'wear', kind: 'native', platform: 'android', builder: 'command', after: ['phone'] },
-    { id: 'wear-ota', kind: 'ota', platform: 'android', nativeTarget: 'wear', channel: 'internal', environment: 'preview' }] };
-  const input = { config, source: { repository: config.repository, commit: 'a'.repeat(40), toolkitCommit: 'b'.repeat(40), origin: 'local' },
-    origin: { kind: 'local' }, observations: config.components.map(({ id }) => ({ id, identity: id, version: '1.0.0', runtime: '1.0.0' })) };
-  const plan = planRelease(input);
-  assert.deepEqual(phaseMatrices(plan).ota_first, []);
-  assert.deepEqual(phaseMatrices(plan).ota_second, [{ target: 'wear-ota', approval: '' }]);
-  assert.deepEqual(phaseMatrices(plan, ['wear-ota:export', 'wear-ota:publish']).ota_second, [{ target: 'wear-ota', approval: '' }]);
-  for (const component of config.components.filter(value => value.kind === 'native')) component.submit = false;
-  assert.deepEqual(phaseMatrices(planRelease(input)).ota_first, [{ target: 'wear-ota', approval: '' }]);
-  for (const job of ['ota-first-export', 'ota-second-export', 'native-second-handoff']) {
-    assert(workflows['release-components.yml'].jobs[job].needs.includes('native-build'), `${job} can race a pending build when submission jobs are skipped`);
-    assert(workflows['release-components.yml'].jobs[job].needs.includes('deployment'));
-  }
-  for (const component of config.components.filter(value => value.kind === 'native')) component.submit = true;
-  config.components.push({ ...config.components[2], id: 'wear-production', after: ['wear-ota'] });
-  input.observations.push({ ...input.observations[2], id: 'wear-production' });
-  assert.throws(() => planRelease(input), /at most two publication waves/);
-});
-
-test('configuration rejects ignored publication constraints and conflicting version ownership', () => {
-  const components = [{ id: 'server', kind: 'server' }, { id: 'phone', kind: 'native', platform: 'android', builder: 'eas' }];
-  const config = { schemaVersion: 1, repository: 'fixture/app', defaultBranch: 'main', components };
-  assert.throws(() => validateConfig({ ...config, components: [{ ...components[0], after: ['phone'] }, components[1]] }), /same kind/);
-  assert.throws(() => validateConfig({ ...config, components: [...components, { id: 'ota', kind: 'ota', platform: 'android', nativeTarget: 'phone',
-    channel: 'internal', environment: 'preview', after: ['server'] }] }), /same kind/);
-  assert.throws(() => validateConfig({ ...config, versionGroups: [{ id: 'one', targets: ['phone'] }, { id: 'two', targets: ['phone'] }] }), /at most one version group/);
-  assert.throws(() => validateConfig({ ...config, versionGroups: [{ id: 'one', targets: ['phone'] }, { id: 'one', targets: ['server'] }] }), /Duplicate version group/);
-});
-
-test('cloud recovery downloads the original producing run', () => {
-  const download = workflows['release-artifact.yml'].jobs['cloud-observe'].steps.find(value => value.with?.name?.startsWith('cloud-accepted-'));
-  assert.equal(download.with['run-id'], '${{ needs.cloud-intent.outputs.producer_run }}');
-  assert.equal(download.with['github-token'], '${{ github.token }}');
+test('upstream setup uses a full action SHA and a pinned EAS version before credentials', () => {
+  const step = setup.runs.steps.find(step => step.uses?.startsWith('expo/expo-github-action@'));
+  assert.match(step.uses, /@[a-f0-9]{40}$/); assert.equal(step.with['eas-version'], '25.3.0'); assert.equal(step.with.token, undefined);
+  assert.ok(setup.runs.steps.some(step => step.run?.includes('npm ci --prefix .toolkit --ignore-scripts')));
+  assert.ok(!fs.existsSync(new URL('../toolchain/package-lock.json', import.meta.url)));
 });

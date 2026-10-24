@@ -1,115 +1,94 @@
-/** @file Credential-free source inspection and mapped metadata transformations shared by CLI and workflow workers. */
+/** @file Source-only inspection and stamping; repository code never receives publication credentials. */
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { invariant, hashIdentity, verifyPlan } from '../packages/release-engine/index.mjs';
-import { readPointer, repositoryPath } from './config.mjs';
-import { runHook, sourceEnvironment } from './hooks.mjs';
-import { configuredComponents } from './planner.mjs';
+import { createRequire } from 'node:module';
+import { hash, inputIdentity, run, git, readJson, writeJson, within, sourceEnvironment } from './io.mjs';
+import { assert, selectRelease } from './engine.mjs';
+import { configured } from './config.mjs';
 
-/** Read tracked source without replacement objects, shell evaluation, or inherited Git credentials/config overrides. */
-export function sourceGit(root, args, options = {}) {
-  return execFileSync('git', ['--no-replace-objects', ...args], { cwd: root, encoding: 'utf8', windowsHide: true,
-    maxBuffer: 64 * 1024 * 1024, env: { ...sourceEnvironment(), GIT_NO_REPLACE_OBJECTS: '1', GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1' }, ...options }).trim();
+/** Invoke a declared argv hook with a JSON request and a credential-free environment. */
+export function hook(root, config, action, request, extraEnvironment = {}) {
+  const command = config.hooks?.[action];
+  if (!command) return {};
+  const result = run(command[0], command.slice(1), { cwd: root, env: sourceEnvironment(extraEnvironment),
+    input: JSON.stringify({ root, action, ...request }) });
+  return JSON.parse(result || '{}');
 }
 
-/** Hash selected tracked file bytes with an application-owned normalization callback. */
-export function trackedIdentity(root, source, { include = () => true, normalize = (file, text) => text, content = () => 'text' } = {}) {
-  invariant(/^[a-f0-9]{40}$/.test(source), 'Source inspection requires a full Git commit.');
-  const files = sourceGit(root, ['ls-tree', '-r', '--name-only', source]).split(/\r?\n/).filter(file => file && include(file)).sort();
-  const hash = createHash('sha256');
-  for (const file of files) {
-    const representation = content(file);
-    invariant(['text', 'blob'].includes(representation), 'Unknown tracked input representation.');
-    const value = normalize(file, sourceGit(root, representation === 'blob' ? ['rev-parse', `${source}:${file}`] : ['show', `${source}:${file}`]));
-    hash.update(`${file}\0${value}\0`);
-  }
-  return hash.digest('hex');
+/** Inspect native compatibility using the consumer's installed official Expo SDK. */
+export function expoInfo(root, config, profile, platform, extra = {}) {
+  const directory = within(root, config.mobile.directory);
+  const require = createRequire(path.join(directory, 'package.json'));
+  const environment = sourceEnvironment({ ...config.profiles[profile].publicEnvironment, ...extra,
+    EAS_BUILD_PLATFORM: platform, EAS_BUILD_PROFILE: config.profiles[profile].easProfile });
+  const expo = JSON.parse(run(process.execPath, [path.join(path.dirname(require.resolve('expo/package.json')), 'bin/cli'), 'config', '--type', 'public', '--json'], { cwd: directory, env: environment }));
+  const fingerprintModule = require.resolve('@expo/fingerprint');
+  const script = `const f=require(process.argv[1]);f.createFingerprintAsync(process.cwd(),{platforms:[process.argv[2]],silent:true,sourceSkips:3}).then(x=>console.log(JSON.stringify(x)));`;
+  const fingerprint = JSON.parse(run(process.execPath, ['-e', script, fingerprintModule, platform], { cwd: directory, env: environment }));
+  assert(typeof fingerprint.hash === 'string' && fingerprint.hash.length >= 32, 'Expo returned no fingerprint.');
+  assert(expo.extra?.eas?.projectId === config.mobile.projectId && expo.owner === config.mobile.owner && expo.slug === config.mobile.slug, 'Resolved Expo project differs from configuration.');
+  const applicationId = platform === 'android' ? expo.android?.package : expo.ios?.bundleIdentifier;
+  assert(config.mobile.targets.filter(t => t.platform === platform).every(t => t.applicationId === applicationId), 'Resolved application identifier differs.');
+  return { fingerprint: fingerprint.hash, expo };
 }
 
-/** Resolve current metadata from mappings after the source-only application inspection. */
-export function inspectSource(config, { root = process.cwd(), source, profile = config.defaultProfile ?? '', environment = {}, environmentHash,
-  componentEnvironments = {}, baseline = {}, runtimeOverrides = {} } = {}) {
-  const result = runHook(config, 'inspect', { source, profile, environment, environmentHash, componentEnvironments, baseline, runtimeOverrides }, { root });
-  invariant(Array.isArray(result.observations), 'Inspect hook must return component observations.');
-  return configuredComponents(config, profile).map(component => {
-    const matches = result.observations.filter(value => value.id === component.id);
-    invariant(matches.length === 1, `Inspect hook must return exactly one ${component.id} observation.`);
-    const resolved = componentEnvironments[component.id];
-    const observation = { ...matches[0],
-      ...(resolved?.deferred ? { environmentHash: null, environmentDeferred: true } : {}),
-      environment: resolved?.environment ?? environment };
-    const mapping = component.version;
-    if (!mapping) return observation;
-    const metadata = JSON.parse(fs.readFileSync(repositoryPath(root, mapping.file), 'utf8'));
-    return { ...observation, version: readPointer(metadata, mapping.pointer),
-      ...(mapping.codePointer ? { versionCode: Number(readPointer(metadata, mapping.codePointer)) } : {}) };
-  });
-}
-
-/** Update an existing owned JSON field; an absent path is a contract error rather than implicit schema creation. */
-export function writePointer(value, pointer, next) {
-  const parts = pointer.slice(1).split('/').map(part => part.replace(/~1/g, '/').replace(/~0/g, '~'));
-  const key = parts.pop();
-  let parent = value;
-  for (const part of parts) { invariant(parent && Object.hasOwn(parent, part), `Missing metadata field ${pointer}.`); parent = parent[part]; }
-  invariant(parent && Object.hasOwn(parent, key) && !['__proto__', 'prototype', 'constructor'].includes(key), `Missing or unsafe metadata field ${pointer}.`);
-  parent[key] = next;
-}
-
-/** Prepare declared version mirrors, then invoke only the application's metadata transformation hook. */
-export function prepareSource(plan, { root = process.cwd(), environment = {} } = {}) {
-  verifyPlan(plan);
-  const originals = {};
-  const changed = new Map();
-  const assign = (mapping, value) => {
-    const file = repositoryPath(root, mapping.file);
-    if (!changed.has(mapping.file)) {
-      originals[mapping.file] = fs.readFileSync(file, 'utf8');
-      changed.set(mapping.file, JSON.parse(originals[mapping.file]));
+/** Inspect every configured native environment so a shared runtime family is stable across profiles. */
+export function inspect(root, rawConfig, ref = git(root, ['rev-parse', 'HEAD']), environments = {}) {
+  const config = configured(rawConfig);
+  const custom = hook(root, config, 'inspect', { source: ref, config });
+  const observation = { server: config.server ? custom.server ?? inputIdentity(root, ref, config.server.inputs) : null,
+    js: {}, fingerprints: {}, metadata: {}, family: null };
+  if (config.mobile) {
+    for (const platform of config.mobile.platforms) observation.js[platform] = custom.js?.[platform] ?? inputIdentity(root, ref, config.mobile.inputs);
+    for (const profile of Object.keys(config.profiles)) {
+      observation.fingerprints[profile] = {};
+      observation.metadata[profile] = {};
+      for (const platform of config.mobile.platforms) {
+        const info = expoInfo(root, config, profile, platform, environments[profile]);
+        observation.fingerprints[profile][platform] = info.fingerprint;
+        observation.metadata[profile][platform] = { version: info.expo.version, runtime: info.expo.runtimeVersion };
+      }
     }
-    writePointer(changed.get(mapping.file), mapping.pointer, value);
-  };
-  for (const component of plan.components.filter(value => value.selected && value.next)) {
-    const group = plan.config.versionGroups?.find(value => value.targets.includes(component.id));
-    const mapping = group?.version ?? component.version;
-    invariant(mapping, `No metadata mapping for reserved target ${component.id}.`);
-    assign(mapping, component.next.version);
-    if (component.version) assign(component.version, component.next.version);
-    for (const mirror of mapping.mirrors ?? []) assign(mirror, component.next.version);
-    if (component.version?.codePointer) assign({ file: component.version.file, pointer: component.version.codePointer },
-      component.version.codeType === 'string' ? String(component.next.versionCode) : component.next.versionCode);
+    observation.family = hash({ fingerprints: observation.fingerprints, extraNative: custom.extraNative ?? null,
+      environments: Object.fromEntries(Object.entries(config.profiles).map(([profile, spec]) => [profile, { ...spec.publicEnvironment, ...environments[profile] }])),
+      targets: config.mobile.targets.map(({ id, platform, applicationId }) => ({ id, platform, applicationId })) });
   }
-  for (const [file, value] of changed) fs.writeFileSync(repositoryPath(root, file), `${JSON.stringify(value, null, 2)}\n`);
-  if (plan.config.hooks?.prepare) runHook(plan.config, 'prepare', { plan, originals, environment, profile: plan.profile }, { root });
-  return { files: sourceGit(root, ['diff', '--name-only']).split(/\r?\n/).filter(Boolean), identity: hashIdentity(Object.fromEntries(changed)) };
+  return observation;
 }
 
-/** Verify a single immutable package/workflow revision rather than another consumer-owned snapshot lock. */
-export function verifyToolkitPins(root, { expectedRevision } = {}) {
-  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  const dependency = manifest.dependencies?.['@mchartier/expo-release'] ?? manifest.devDependencies?.['@mchartier/expo-release'];
-  const match = /^git\+https:\/\/github\.com\/MChartier\/expo-release-template\.git#([a-f0-9]{40})$/.exec(dependency ?? '');
-  invariant(match, 'Install @mchartier/expo-release through its full-SHA git+https dependency.');
-  const revision = match[1];
-  invariant(!expectedRevision || revision === expectedRevision, 'Installed toolkit revision differs from the trusted worker.');
-  const workflowRoot = path.join(root, '.github', 'workflows');
-  let references = 0;
-  for (const file of fs.existsSync(workflowRoot) ? fs.readdirSync(workflowRoot) : []) {
-    if (!/\.ya?ml$/.test(file)) continue;
-    const text = fs.readFileSync(path.join(workflowRoot, file), 'utf8');
-    for (const use of text.matchAll(/MChartier\/expo-release-template\/[^\s@]+@([^\s#]+)/g)) {
-      references += 1;
-      invariant(use[1] === revision, `Toolkit workflow pin differs in ${file}.`);
-    }
+/** Prepare an immutable versioned build commit without writing to the default branch. */
+export function prepare(root, config, context, profile, rebuild) {
+  assert(git(root, ['rev-parse', 'HEAD']) === context.source && !git(root, ['branch', '--show-current'])
+    && !git(root, ['status', '--porcelain', '--untracked-files=no']), 'Prepare requires a clean detached checkout of the selected source.');
+  const observation = inspect(root, config, context.source, context.environments);
+  const plan = { ...selectRelease(configured(config), profile, observation, context.history, rebuild),
+    config, environments: context.environments, repository: config.repository, source: context.source, toolkit: context.toolkit, run: context.run };
+  if (plan.noop) return plan;
+  hook(root, config, 'prepare', { plan });
+  if (config.mobile) {
+    const current = inspect(root, config, context.source, context.environments);
+    assert(current.family === observation.family, 'Version stamping changed native compatibility.');
+    if (plan.bump) assert(Object.values(current.metadata[profile]).every(info => info.version === plan.versions.mobile && info.runtime === plan.runtime),
+      'Preparation must stamp the allocated version and major-only runtime.');
   }
-  invariant(references > 0, 'No shared release workflow callers are configured.');
-  const lockPath = path.join(root, 'package-lock.json');
-  if (fs.existsSync(lockPath)) {
-    const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
-    const installed = lock.packages?.['node_modules/@mchartier/expo-release'];
-    invariant(installed?.resolved?.endsWith(`#${revision}`), 'Package lock does not resolve the configured toolkit revision.');
-  }
-  return revision;
+  hook(root, config, 'validate', { plan }, plan.environments[profile]);
+  const changed = git(root, ['diff', '--name-only']).split(/\r?\n/).filter(Boolean);
+  assert(changed.every(file => config.metadataFiles.includes(file)), 'Preparation changed files outside declared metadata.');
+  if (changed.length) git(root, ['add', '--', ...changed]);
+  git(root, ['-c', 'user.name=Release automation', '-c', 'user.email=release@users.noreply.github.com',
+    'commit', '--allow-empty', '-m', `Prepare release ${plan.versions.mobile ?? plan.versions.server}`]);
+  plan.build = git(root, ['rev-parse', 'HEAD']);
+  return plan;
+}
+
+/** Export exact OTA bytes from the tagged build checkout without an Expo token. */
+export function exportBundle(root, plan, platform, directory) {
+  const { config, profile } = plan;
+  const current = expoInfo(root, config, profile, platform, plan.environments[profile]);
+  assert(current.fingerprint === plan.observation.fingerprints[profile][platform] && current.expo.runtimeVersion === plan.runtime,
+    'Export is incompatible with the planned runtime.');
+  const app = within(root, config.mobile.directory), require = createRequire(path.join(app, 'package.json'));
+  run(process.execPath, [path.join(path.dirname(require.resolve('expo/package.json')), 'bin/cli'), 'export', '--platform', platform,
+    '--output-dir', path.resolve(directory)], { cwd: app, env: sourceEnvironment({ ...config.profiles[profile].publicEnvironment, ...plan.environments[profile] }), stdio: 'inherit' });
+  writeJson(path.join(directory, 'expo-release.json'), { expo: current.expo, runtime: plan.runtime, version: plan.versions.mobile, platform });
 }

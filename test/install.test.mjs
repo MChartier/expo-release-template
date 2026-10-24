@@ -1,52 +1,23 @@
-/** @file Clean package and full-SHA Git installation checks; installs tools but never accesses a release provider. */
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
+/** @file Exercise a clean full-SHA Git installation without a build step or copied engine snapshots. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sourceEnvironment } from '../src/hooks.mjs';
-import { setupToolchain, resolveToolchain } from '../src/toolchain.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { run, readJson, writeJson } from '../src/io.mjs';
+import { repository, temporary } from './helpers.mjs';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
-test('clean tarball and immutable Git installs expose only the public contract and share official tool setup', { skip: process.env.EXPO_RELEASE_INSTALL_TEST !== '1', timeout: 600000 }, () => {
-  setupToolchain(); const toolchain = resolveToolchain();
-  const sdk = createRequire(import.meta.url);
-  for (const [module, methods] of Object.entries({ BuildQuery: ['withSubmissionsByIdAsync'], SubmissionQuery: ['byIdWithSubmittedBuildAsync'],
-    UpdateQuery: ['viewUpdateGroupsOnBranchAsync', 'viewUpdateGroupAsync'], AssetQuery: ['getSignedUrlsAsync'],
-    ChannelQuery: ['viewUpdateChannelAsync'], EnvironmentVariablesQuery: ['byAppIdWithSensitiveAsync'] })) {
-    const loaded = sdk(path.join(toolchain, 'node_modules/eas-cli/build/graphql/queries', `${module}.js`))[module];
-    for (const method of methods) assert.equal(typeof loaded[method], 'function', `${module}.${method} private evidence contract changed`);
-  }
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'release-install-'));
-  const npm = process.env.npm_execpath || path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
-  const run = (args, cwd = directory) => execFileSync(process.execPath, args, { cwd, env: sourceEnvironment(), windowsHide: true,
-    stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: 300000, maxBuffer: 16 * 1024 * 1024 });
-  try {
-    const packed = JSON.parse(run([npm, 'pack', '--ignore-scripts', '--json', '--pack-destination', directory], root))[0];
-    const specs = [path.join(directory, packed.filename)];
-    const revision = process.env.EXPO_RELEASE_TEST_SHA;
-    if (revision) { assert.match(revision, /^[a-f0-9]{40}$/); specs.push(`git+https://github.com/MChartier/expo-release-template.git#${revision}`); }
-    for (const [index, spec] of specs.entries()) for (const ignore of [false, true]) {
-      const cwd = path.join(directory, `${index}-${ignore}`); fs.mkdirSync(cwd); fs.writeFileSync(path.join(cwd, 'package.json'), '{"private":true,"type":"module"}');
-      run([npm, 'install', '--no-audit', '--no-fund', ...(ignore ? ['--ignore-scripts'] : []), spec], cwd);
-      const installed = path.join(cwd, 'node_modules/@mchartier/expo-release');
-      const manifest = JSON.parse(fs.readFileSync(path.join(installed, 'package.json'), 'utf8'));
-      assert.equal(manifest.dependencies['eas-cli'], undefined); assert.equal(manifest.scripts.prepare, undefined);
-      assert.equal(fs.existsSync(path.join(installed, 'vendor')), false);
-      const check = `import assert from 'node:assert/strict';import {createRequire} from 'node:module';
-        import * as api from '@mchartier/expo-release';
-        assert.equal(typeof api.planRelease,'function');assert.equal(api.createEasTransport,undefined);
-        assert.deepEqual(createRequire(import.meta.url)('@mchartier/expo-release/expo').runtimeVersion(),{policy:'appVersion'});
-        assert.equal(api.setupToolchain().directory,${JSON.stringify(toolchain)});
-        console.log(api.resolveEasCli());`;
-      run(['--input-type=module', '-e', check], cwd);
-      run([path.join(installed, 'bin/expo-release.mjs'), 'help'], cwd);
-    }
-  } finally {
-    assert.equal(path.dirname(path.resolve(directory)), path.resolve(os.tmpdir()));
-    fs.rmSync(directory, { recursive: true, force: true });
-  }
+test('package installs directly from a full Git SHA with executable CLI and Expo helper', {timeout:120000}, t => {
+  const source=repository(t), consumer=temporary(t), root=fileURLToPath(new URL('../',import.meta.url));
+  for(const file of ['src','bin','schemas','package.json','package-lock.json'])fs.cpSync(path.join(root,file),path.join(source.root,file),{recursive:true});
+  const sha=source.commit();
+  writeJson(path.join(consumer,'package.json'),{name:'clean-install',private:true,devDependencies:{'@mchartier/expo-release':`git+${pathToFileURL(source.root).href}#${sha}`}});
+  run('npm',['install','--ignore-scripts','--no-audit','--no-fund','--offline'],{cwd:consumer});
+  const installed=readJson(path.join(consumer,'node_modules/@mchartier/expo-release/package.json'));
+  assert.equal(installed.version,'3.0.0');assert.deepEqual(Object.keys(installed.dependencies),['ajv']);assert.equal(installed.scripts.prepare,undefined);
+  assert.match(run(process.execPath,['node_modules/@mchartier/expo-release/bin/expo-release.mjs','--help'],{cwd:consumer}),/plan --profile/);
+  assert.equal(run(process.execPath,['-e',"console.log(require('@mchartier/expo-release/expo').runtimeVersion('3.2.1'))"],{cwd:consumer}).trim(),'3');
+  assert.ok(readJson(path.join(consumer,'package-lock.json')).packages['node_modules/@mchartier/expo-release'].resolved.endsWith(`#${sha}`));
+  run('npm',['ci','--ignore-scripts','--offline','--no-audit','--no-fund'],{cwd:consumer});
+  assert.ok(fs.existsSync(path.join(consumer,'node_modules/@mchartier/expo-release/src/engine.mjs')));
 });

@@ -1,50 +1,33 @@
 {
   "name": "@mchartier/expo-release",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "type": "module",
   "engines": {
     "node": ">=22.14"
   },
   "bin": {
-    "expo-release": "bin/expo-release.mjs",
-    "expo-release-credentials": "bin/expo-release-credentials.mjs"
+    "expo-release": "bin/expo-release.mjs"
   },
   "exports": {
-    ".": {
-      "types": "./src/index.d.mts",
-      "default": "./src/index.mjs"
-    },
-    "./engine": "./packages/release-engine/index.mjs",
-    "./expo": {
-      "types": "./src/expo.d.cts",
-      "default": "./src/expo.cjs"
-    },
+    ".": "./src/index.mjs",
+    "./engine": "./src/engine.mjs",
+    "./expo": "./src/expo.cjs",
     "./package.json": "./package.json",
     "./schemas/*": "./schemas/*"
   },
   "files": [
     "bin",
     "src",
-    "schemas",
-    "packages/release-engine/*.mjs",
-    "packages/release-engine/*.mts",
-    "toolchain/*.json"
+    "schemas"
   ],
   "dependencies": {
-    "@googleapis/androidpublisher": "42.2.0",
-    "ajv": "8.20.0",
-    "google-auth-library": "11.3.1",
-    "tar": "7.5.21"
+    "ajv": "8.20.0"
   },
   "devDependencies": {
-    "@types/node": "24.19.2",
-    "json-schema-to-typescript": "16.0.0",
-    "typescript": "5.9.3",
     "yaml": "2.9.0"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs packages/release-engine/test/*.test.mjs",
-    "check": "npm test",
-    "generate:types": "node scripts/generate-types.mjs"
+    "test": "node --test test/*.test.mjs",
+    "check": "npm test"
   }
 }

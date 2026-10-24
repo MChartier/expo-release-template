@@ -1,4 +1,6 @@
 #!/usr/bin/env node
-/** @file Trusted reusable-workflow entrypoint, installed independently of the consumer's dependency tree. */
-import { mainWorker } from '../src/worker.mjs';
-mainWorker().catch(error => { console.error(error.message); process.exitCode = 1; });
+/** @file Internal fixed workflow phase launcher; not a release recovery or orchestration CLI. */
+import path from 'node:path';
+import { worker } from '../src/worker.mjs';
+try { await worker(process.argv[2], path.resolve(process.argv[3] || 'app'), path.resolve(process.argv[4] || 'state')); }
+catch (error) { console.error(error.message); process.exitCode = 1; }
