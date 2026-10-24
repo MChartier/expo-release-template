@@ -32,7 +32,10 @@ export function within(root, relative) {
 export function run(command, args = [], options = {}) {
   if (process.platform === 'win32' && ['npm', 'eas'].includes(command)) {
     const shim = execFileSync('where.exe', [`${command}.cmd`], { encoding: 'utf8', windowsHide: true }).trim().split(/\r?\n/)[0];
-    args = [path.join(path.dirname(shim), 'node_modules', command === 'npm' ? 'npm/bin/npm-cli.js' : 'eas-cli/bin/run'), ...args];
+    const entry = command === 'npm' ? 'npm/bin/npm-cli.js' : 'eas-cli/bin/run';
+    const launcher = [path.join(path.dirname(shim), 'node_modules', entry), path.resolve(path.dirname(shim), '..', entry)].find(file => fs.existsSync(file));
+    assert(launcher, `Cannot resolve the installed ${command} launcher.`);
+    args = [launcher, ...args];
     command = process.execPath;
   }
   return execFileSync(command, args, { encoding: 'utf8', windowsHide: true, maxBuffer: 64 * 1024 * 1024,
