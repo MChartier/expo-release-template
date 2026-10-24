@@ -74,6 +74,7 @@ test('OTA inspection and export use the same explicit profile/platform with no p
     extra: { eas: { projectId: release.config.mobile.projectId } }, android: { package: 'app.example.mobile' } };
   repo.save('package.json', '{"private":true}');
   repo.save('node_modules/expo/package.json', '{"name":"expo"}');
+  repo.save('node_modules/expo-updates/package.json', '{"name":"expo-updates","version":"57.0.8"}');
   repo.save('node_modules/expo/bin/cli', `/** @file Test SDK executable boundary. */
 const fs=require('node:fs'),path=require('node:path');
 if(process.env.EAS_BUILD_PLATFORM!=='android'||process.env.EAS_BUILD_PROFILE!=='production'||process.env.EXPO_TOKEN)throw Error('wrong source environment');

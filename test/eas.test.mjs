@@ -121,13 +121,14 @@ test('Calibrate phone and watch destinations stay distinct in EAS submit profile
 test('OTA publishes exact exported files with supported CLI options', t => {
   const directory = temporary(t), value = plan({ bump: 'patch', ota: ['android'], native: false });
   writeJson(path.join(directory,'metadata.json'), { version: 0, bundler: 'metro', fileMetadata: {} });
-  writeJson(path.join(directory,'expo-release.json'), { version: value.versions.mobile, runtime: value.runtime, platform: 'android',
+  writeJson(path.join(directory,'expo-release.json'), { version: value.versions.mobile, runtime: value.runtime, platform: 'android', updatesVersion: '57.0.8',
     expo: { version: value.versions.mobile, runtimeVersion: value.runtime, extra: { releaseVersion: value.versions.mobile } } });
   seal(directory,value,'ota-android'); t.after(() => fs.rmSync(`${directory}.json`,{force:true}));
   const result = update(value,'android',directory,(args,root) => {
     assert.ok(args.includes('--skip-bundler')); assert.equal(args[args.indexOf('--input-dir')+1], directory);
     assert.equal(args[args.indexOf('--channel')+1], 'production');
     assert.equal(readJson(path.join(root,'app.json')).expo.extra.releaseVersion,value.versions.mobile);
+    assert.deepEqual(readJson(path.join(root,'package.json')).dependencies, { 'expo-updates': '57.0.8' });
     return [{ group:'group-id', runtimeVersion:value.runtime, platform:'android' }];
   });
   assert.equal(result.group,'group-id');

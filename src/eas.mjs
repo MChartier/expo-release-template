@@ -17,7 +17,7 @@ export function eas(args, cwd, { json = true, environment = {}, execute = run } 
 }
 
 /** Create an inert publisher project from verified identities and EAS submit configuration. */
-export function publisher(config, profile, { target, expo = {}, submit = {} } = {}) {
+export function publisher(config, profile, { target, expo = {}, submit = {}, updatesVersion } = {}) {
   const mobile = config.mobile, selected = config.profiles[profile];
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'expo-publisher-'));
   const app = { ...expo, name: mobile.slug, owner: mobile.owner, slug: mobile.slug,
@@ -25,7 +25,8 @@ export function publisher(config, profile, { target, expo = {}, submit = {} } = 
     android: { ...expo.android, package: target?.applicationId ?? mobile.targets.find(t => t.platform === 'android')?.applicationId },
     ios: { ...expo.ios, bundleIdentifier: target?.applicationId ?? mobile.targets.find(t => t.platform === 'ios')?.applicationId } };
   for (const key of ['plugins', 'hooks', 'entryPoint', 'experiments']) delete app[key];
-  writeJson(path.join(root, 'package.json'), { name: 'release-publisher', private: true, version: '1.0.0' });
+  writeJson(path.join(root, 'package.json'), { name: 'release-publisher', private: true, version: '1.0.0',
+    ...(updatesVersion ? { dependencies: { 'expo-updates': updatesVersion } } : {}) });
   writeJson(path.join(root, 'app.json'), { expo: app });
   writeJson(path.join(root, 'eas.json'), { cli: { version: EAS_VERSION, requireCommit: false, appVersionSource: 'remote' },
     build: { [selected.easProfile]: { environment: selected.environment } }, submit });
@@ -129,7 +130,8 @@ export function update(plan, platform, directory, command = eas) {
   verify(directory, plan, `ota-${platform}`);
   const info = readJson(path.join(directory, 'expo-release.json'));
   assert(info.runtime === plan.runtime && info.version === plan.versions.mobile && info.platform === platform, 'OTA metadata differs from the release.');
-  const root = publisher(plan.config, plan.profile, { expo: info.expo });
+  assert(/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(info.updatesVersion ?? ''), 'Missing exported expo-updates version.');
+  const root = publisher(plan.config, plan.profile, { expo: info.expo, updatesVersion: info.updatesVersion });
   const profile = plan.config.profiles[plan.profile];
   try {
     const result = command(['update', '--channel', profile.channel, '--environment', profile.environment, '--platform', platform,
