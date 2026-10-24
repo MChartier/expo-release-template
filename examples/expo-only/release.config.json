@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 3,
+  "repository": "example/expo-app",
+  "defaultBranch": "main",
+  "install": [["npm", "ci"]],
+  "metadataFiles": ["app.json"],
+  "profiles": {
+    "internal": { "environment": "preview", "approvalEnvironment": "internal", "channel": "internal", "easProfile": "internal", "submit": false }
+  },
+  "mobile": {
+    "directory": ".", "versionFloor": "0.0.0", "inputs": ["index.js", "app", "assets", "package.json", "package-lock.json", "app.config.js"],
+    "projectId": "12345678-1234-1234-1234-123456789012", "owner": "example", "slug": "expo-app",
+    "targets": [{ "id": "android", "platform": "android", "applicationId": "example.expo.app", "buildNumberFloor": 0 }]
+  },
+  "hooks": { "prepare": ["node", "release-hooks.mjs"] }
+}

@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "repository", "defaultBranch", "profiles", "install", "metadataFiles"],
+  "properties": {
+    "schemaVersion": { "const": 3 },
+    "repository": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+    "defaultBranch": { "type": "string", "minLength": 1 },
+    "install": { "type": "array", "items": { "$ref": "#/definitions/command" } },
+    "metadataFiles": { "$ref": "#/definitions/paths" },
+    "hooks": { "type": "object", "additionalProperties": false, "properties": {
+      "inspect": { "$ref": "#/definitions/command" }, "prepare": { "$ref": "#/definitions/command" },
+      "validate": { "$ref": "#/definitions/command" }, "buildPrepare": { "$ref": "#/definitions/command" },
+      "build": { "$ref": "#/definitions/command" }, "verify": { "$ref": "#/definitions/command" }
+    } },
+    "profiles": { "type": "object", "minProperties": 1, "propertyNames": { "$ref": "#/definitions/name" }, "additionalProperties": {
+      "type": "object", "additionalProperties": false, "required": ["environment", "approvalEnvironment"],
+      "properties": {
+        "environment": { "enum": ["development", "preview", "production"] },
+        "channel": { "$ref": "#/definitions/name" }, "easProfile": { "$ref": "#/definitions/name" },
+        "submit": { "type": "boolean" }, "approvalEnvironment": { "type": "string" },
+        "submitEnvironment": { "type": "string" }, "signingEnvironment": { "type": "string" },
+        "deployEnvironment": { "type": "string" },
+        "publicEnvironment": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    } },
+    "mobile": { "type": "object", "additionalProperties": false,
+      "required": ["directory", "versionFloor", "inputs", "targets", "projectId", "owner", "slug"], "properties": {
+        "directory": { "type": "string" }, "versionFloor": { "$ref": "#/definitions/version" },
+        "inputs": { "$ref": "#/definitions/paths" }, "builder": { "enum": ["eas", "command"] },
+        "projectId": { "type": "string", "pattern": "^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$" },
+        "owner": { "$ref": "#/definitions/name" }, "slug": { "$ref": "#/definitions/name" },
+        "publicVariables": { "$ref": "#/definitions/paths" },
+        "pairCodeFloor": { "type": "integer", "minimum": 0, "maximum": 2099999997 },
+        "targets": { "type": "array", "minItems": 1, "maxItems": 2, "items": {
+          "type": "object", "additionalProperties": false, "required": ["id", "platform", "applicationId"], "properties": {
+            "id": { "$ref": "#/definitions/name" }, "platform": { "enum": ["android", "ios"] },
+            "applicationId": { "type": "string", "pattern": "^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+$" },
+            "submitProfile": { "$ref": "#/definitions/name" }
+            ,"buildNumberFloor": { "type": "integer", "minimum": 0 }
+          }
+        } }
+      }
+    },
+    "server": { "type": "object", "additionalProperties": false,
+      "required": ["versionFloor", "inputs", "image", "dockerfile", "platforms", "smoke", "deployment"], "properties": {
+        "versionFloor": { "$ref": "#/definitions/version" }, "inputs": { "$ref": "#/definitions/paths" },
+        "image": { "type": "string", "pattern": "^ghcr.io/[a-z0-9_.-]+/[a-z0-9_.-]+$" },
+        "dockerfile": { "type": "string" }, "context": { "type": "string" }, "metadataOnNative": { "type": "boolean" },
+        "platforms": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["linux/amd64", "linux/arm64"] } },
+        "smoke": { "type": "object", "additionalProperties": false, "required": ["port", "healthPath"], "properties": {
+          "port": { "type": "integer", "minimum": 1, "maximum": 65535 }, "healthPath": { "type": "string", "pattern": "^/" },
+          "environment": { "type": "object", "additionalProperties": { "type": "string" } },
+          "services": { "type": "object", "additionalProperties": { "type": "object", "required": ["image", "environment"], "properties": {
+            "image": { "type": "string" }, "environment": { "type": "object", "additionalProperties": { "type": "string" } }
+          }, "additionalProperties": false } }
+        } },
+        "deployment": { "type": "object", "additionalProperties": false, "required": ["service", "path"], "properties": {
+          "service": { "$ref": "#/definitions/name" }, "path": { "type": "string", "pattern": "^/deploy/[A-Za-z0-9_-]+$" }
+        } }
+      }
+    }
+  },
+  "definitions": {
+    "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$" },
+    "version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" },
+    "command": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "paths": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+  }
+}

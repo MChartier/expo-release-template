@@ -2,5 +2,7 @@ node_modules/
 coverage/
 artifacts/
 *.tgz
+!vendor/*.tgz
 .env
 .env.*
+/.work/

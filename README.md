@@ -1,78 +1,52 @@
-# Expo release template
+# Expo releases: three fixed paths
 
-This repository owns a dependency-free release engine and pinned GitHub Actions contracts for Expo projects. A release selects server images, native binaries, and OTA targets independently, then records the selected operations without confusing a queued store submission with a completed release.
+This package provides one reusable GitHub Actions workflow for Docker server releases, native Expo builds and current-runtime OTA updates. GitHub runs jobs and approvals. Official EAS tooling builds, submits and distributes mobile releases. Consumers provide application configuration, input boundaries, metadata transformations and exceptional builders.
 
-Application repositories keep their build commands and credential boundaries. The engine owns deterministic selection, dependency expansion, immutable plan identities, stage readiness, recovery transitions, version helpers, and artifact verification. The first consumers are Little Say (Android and iOS) and Calibrate (paired Android phone and Wear).
+The complete toolkit requires Node 22.14+; CI uses Node 24 on Windows and Linux. The pure planning engine supports Node 20+ without dependencies. The only runtime package dependency is Ajv for configuration validation.
 
-## Release contract
+## Install and configure
 
-1. Pin the application source, trusted caller workflow, engine revision, configuration, destinations, and component baselines.
-2. Compare effective inputs against each component's verified baseline. Documentation, tests, and irrelevant bookkeeping do not select application releases. Missing baselines select the applicable first release.
-3. Apply configured native groups and real artifact dependencies. Calibrate native version metadata also changes its shipped server diagnostics. Version preparation must finish before resolving final runtime identities.
-4. Prepare selected versions together through normal protected-branch validation. OTA-only and no-op cuts do not create empty version PRs.
-5. Build selected artifacts. Persist exact per-target OTA exports before publication intent. Never recompile Hermes to verify an earlier publication.
-6. Deploy and check health only when the server component is selected. Serverless and OTA-only configurations need no deployment credentials.
-7. When native store submission is selected, verify the successful native artifacts, enqueue the exact artifact, and verify its submission identity before OTA. Monitor submission independently of OTA. Calibrate serializes phone completion before Wear submission.
-8. Record every outcome, including successful operations from an incomplete run. Complete only after every required stage succeeds. Unknown remote outcomes require reconciliation before retry.
+Install `@mchartier/expo-release` from a reviewed full Git SHA and use that same SHA for `.github/workflows/release.yml`. Run `node scripts/sync-engine.mjs FULL_SHA CONSUMER...` from this repository to update consumer package/workflow pins and regenerate npm locks. It copies no engine snapshots.
 
-Native runtime identity, application versions, build numbers, OTA channel, EAS environment, and store track are distinct configuration values. Fingerprint runtimes prove native compatibility; they do not prove that JavaScript changed or that a store accepted the binary.
+Add a small [release.config.json](schemas/release.config.schema.json), an EAS profile for each release destination, and a manual `workflow_dispatch` caller. Profiles name the EAS environment/channel and existing protected GitHub environments. The reusable workflow verifies the protected default-branch invocation and serializes all releases in the repository. Dispatch only `profile` and optional `rebuild`.
 
-## Contents
+Use `npm run release -- validate` to check configuration. `npm run release -- plan --profile production` previews selection by reading GitHub history and EAS public environment values. It requires `gh` authentication and the pinned official EAS CLI on PATH. `--history CONTEXT.json` permits an offline preview with explicit `history` and `environments`. Planning never reserves versions or publishes anything.
 
-- `packages/release-engine/`: zero-dependency ESM library, TypeScript declarations, and executable contract tests.
-- `scripts/sync-engine.mjs`: installs a consumer snapshot from an exact committed revision.
-- `action.yml`: checks a consumer snapshot against the exact upstream action revision.
-- `.github/workflows/release-contract.yml`: reusable read-only contract tests for consumer repositories.
-- `examples/expo-only.mjs`: working selection and ordering example without a server, Wear, deployment secrets, or store submission.
-- `docs/adapters.md`: adapter responsibilities and migration rules.
-- `docs/consumers.md`: Little Say/Calibrate policy differences and guidance for another Expo app.
+Hosted jobs install EAS CLI **25.3.0** using the pinned official Expo GitHub Action. There is no custom installer, bundled EAS lockfile or private EAS API adapter. Ordinary Expo builds use `appVersionSource: remote` and `autoIncrement: true`. Initialize remote counters with official EAS tooling above the verified store/build floors before the first dispatch; the workflow checks those floors before reserving anything.
 
-## Start a new consumer
+See the [serverless example](examples/expo-only/README.md) and [consumer interface](docs/interfaces.md).
 
-Use this repository as a GitHub template or add its engine to an existing Expo repository. Application build/publish adapters must be configured for that application's identity and credentials; creating a repository does not authorize or start publication.
+## Selection and versions
 
-Clone this repository at the reviewed revision, then install its snapshot into the consumer:
+| Work | Mobile version | Action |
+| --- | --- | --- |
+| Native fingerprint changed, including first cutover | Next major | Build every enabled platform; runtime is the new major |
+| Compatible binary rebuild requested | Next minor | Build binaries and publish OTA for the same runtime |
+| JS/assets changed with compatible native inputs | Next patch | OTA for affected platforms |
+| No relevant changes | Unchanged | No release work |
 
-```powershell
-node scripts/sync-engine.mjs --revision FULL_40_CHARACTER_COMMIT --target C:/path/to/app
-```
+There is one mobile semantic version across platforms. Expo runtime is an explicit string such as `"2"`. Binaries 2.0.0 and 2.1.0 can receive bundle version 2.1.1 when their native compatibility is unchanged. Installed binaries keep their original binary version; OTA metadata carries the newer bundle release version. A changed fingerprint always starts a new major. OTA never backports to a different runtime.
 
-The command writes `tools/release-engine/`, `tools/verify-release-engine.mjs`, `release-engine.lock.json`, and byte-preserving Git attributes. It reads committed blobs, not uncommitted files. A locally modified managed snapshot is rejected instead of overwritten.
+The server has an independent patch version. Git input sets retain binary changes, deletions, lockfiles and shared packages. Baselines belong to each successful target, independent of the overall workflow conclusion. Native compatibility belongs to successful builds, independently of store submission status. Calibrate additionally deploys its diagnostic server metadata when producing a new native version.
 
-Import the shared API from the consumer's `tools/release-engine/index.mjs`. Keep app-specific configuration and adapters outside that managed directory. The snapshot includes its tests and works offline on Windows and Linux without a package registry token.
+The workflow stamps a detached child commit of the selected source and reserves annotated tags under `expo-release/v3/`. Failed reservations consume their versions. It never changes the default branch or opens a version PR. Calibrate's one exception reserves an odd phone/even watch build-number pair above all prior reservations and the verified seed floor.
 
-Add the pinned verification action to consumer CI after checkout:
+## Execution and trust
 
-```yaml
-# Verify the exact common engine before testing app-specific release adapters.
-- uses: MChartier/expo-release-template@FULL_40_CHARACTER_COMMIT
-```
+The server path builds and smoke-tests a Docker archive without registry credentials. A separate protected job verifies the current-run artifact, publishes version/commit tags and records its digest. The deployment job opens the configured WireGuard tunnel, invokes the existing webhook once and requires its success/health response before advancing the deployment baseline. A health response does not prove the exact remotely running image digest.
 
-Add the read-only shared contract job:
+Selected server deployment precedes native delivery. Ordinary apps use EAS Build, followed by EAS Submit when configured. Internal distribution finishes with EAS Build. Calibrate keeps its paired Gradle builder and signing/artifact checks, then submits the resulting phone and watch bundles in order through EAS. Store review and promotions remain in provider tooling.
 
-```yaml
-# Run the same selection, recovery, and artifact contracts in every consumer.
-release-engine:
-  permissions:
-    contents: read
-  uses: MChartier/expo-release-template/.github/workflows/release-contract.yml@FULL_40_CHARACTER_COMMIT
-```
+OTA export runs without publishing credentials. A separate protected publisher verifies the exact exported bytes and uses `eas update --skip-bundler`. On a new major, embedded bundles establish compatibility; no update is sent to the previous runtime. A compatible rebuild can publish OTA once native build evidence exists without waiting for store review.
 
-Use the same full commit in the lock, action, and reusable workflow. This public template supports both public and private consumers without a cross-repository PAT or a new GitHub App.
+Signing, publication and deployment use separate jobs. Privileged publishers use inert temporary EAS projects and never run consumer scripts. Source checks, Docker builds and OTA exports receive no publishing credentials. EAS cloud build's authenticated source evaluation is its explicit exception. Artifacts must match the current run, source, toolkit, plan, destination and file digests; local and imported receipts are unsupported.
 
-The action verifies against its downloaded upstream code, not merely against a self-authored local lock. The reusable job checks local snapshot consistency and runs contract tests with read-only permissions and no publication secrets; use both jobs for authoritative verification. Existing application release workers retain job-scoped signing, attestation, publishing, and approval environments.
+## Failures and cutover
 
-## Update an existing consumer
+Before an external request, the toolkit creates a GitHub deployment record for that operation. After success, it uploads compact immutable evidence and marks only that deployment successful. Missing acknowledgement leaves an outstanding operation. No job rerun or missing evidence authorizes another request.
 
-Review and test the engine change in this repository, commit it, and run the synchronization command using that new full SHA. Update both pinned workflow references to match the generated lock. Run the consumer's release contract tests and existing release/native/deployment checks before merging the update.
+Use GitHub, EAS and store tools to investigate an interrupted operation. A confirmed terminal failure can be marked `failure` by an operator; a confirmed success requires retaining its actual provider evidence before marking success. `inactive`, absent and error statuses remain blocking. Do not mark a timeout failed merely to unlock a retry. Start a new dispatch after resolution; this toolkit has no replay/recovery CLI.
 
-Keep historical plan and receipt readers. New policy does not rewrite an old plan or turn an old queued operation into a completed one. Template upgrades do not automatically cut a release, rebuild a native app, repoint an OTA channel, or deploy a server.
+The cutover starts an empty history. Old plans, signer imports, retained artifact commands, promotions, candidate PRs, local release wrappers and historical runtime reconstruction are removed. Both consumers must receive a fresh native release before subsequent OTA updates. See [cutover instructions](docs/cutover.md).
 
-## Validate
-
-```powershell
-npm test
-node examples/expo-only.mjs
-```
-
-The suite uses synthetic provider states and temporary artifact/Git fixtures; it does not contact Expo, stores, GitHub publishing APIs, or a deployment service. Application integration tests remain in their repositories. Live release validation is a separate operator action after the migration has passed review and CI.
+Run `npm test` for selection, reservations, preparation, trust boundaries, provider contracts, workflow ordering and installation checks. Tests never dispatch a live release. Keep authored shared implementation plus consumer integration at or below 3,000 physical lines; report tests, documentation, generated locks and existing application build tools separately.

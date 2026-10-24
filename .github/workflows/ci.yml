@@ -1,24 +1,27 @@
-# Validates shared release policy, artifact boundaries, and consumer synchronization on Windows and Linux.
+# Exercise helpers and installation on supported hosts without admitting release credentials.
 name: Check
-on:
-  pull_request:
-  push:
-    branches: [main]
-permissions:
-  contents: read
+on: [push, pull_request]
+permissions: { contents: read }
 jobs:
-  test:
+  helpers:
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+      matrix: { os: [ubuntu-latest, windows-latest], node: ['24'] }
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '24'
+        with: { node-version: '${{ matrix.node }}', cache: npm }
+      - run: npm ci --ignore-scripts
+      - uses: expo/expo-github-action@9da89d3617bb88139671bad31b09c65714c2ee06
+        with: { eas-version: '25.3.0', packager: npm }
       - run: npm test
+        env: { EXPO_RELEASE_TEST_EAS: eas }
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: '20' }
+      - run: npm ci --ignore-scripts
+      - run: node --test test/selection.test.mjs
