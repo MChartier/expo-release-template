@@ -102,19 +102,19 @@ test('intent is saved before the caller may invoke its provider', async () => {
 
 test('an outstanding request prevents creation of another intent', async () => {
   for (const state of [undefined, 'pending', 'in_progress', 'error', 'inactive']) {
-    const fake = client({ deployments: [{ id: 9, payload: { run: 'older' } }], states: { 9: state } });
+    const fake = client({ deployments: [{ id: 9, payload: { key: 'production/ota/android', run: 'older' } }], states: { 9: state } });
     await assert.rejects(begin(fake, plan(), 'ota/android'), /unresolved/);
     assert.equal(fake.calls.filter(call => call[0] === 'POST').length, 0);
   }
 });
 
 test('same-run duplicate is rejected even after completed success', async () => {
-  const fake = client({ deployments: [{ id: 9, payload: { run: '123' } }], states: { 9: 'success' } });
+  const fake = client({ deployments: [{ id: 9, payload: { key: 'production/ota/android', run: '123' } }], states: { 9: 'success' } });
   await assert.rejects(begin(fake, plan(), 'ota/android'), /already attempted/);
 });
 
 test('operator-confirmed failure allows a new run, not an implicit automatic retry', async () => {
-  const fake = client({ deployments: [{ id: 9, payload: { run: 'older' } }], states: { 9: 'failure' } });
+  const fake = client({ deployments: [{ id: 9, payload: { key: 'production/ota/android', run: 'older' } }], states: { 9: 'failure' } });
   assert.equal(await begin(fake, plan(), 'ota/android'), 42);
 });
 
@@ -125,6 +125,12 @@ test('immutable evidence precedes success and failure leaves the intent outstand
   const failed = client({ failAt: method => method === 'evidence' });
   await assert.rejects(complete(failed, plan(), 'ota/ios', 77, {}));
   assert.ok(!failed.calls.some(call => call[0] === 'POST'));
+});
+
+test('intent check blocks the same target across profiles while allowing unrelated operations', async () => {
+  const fake = client({ deployments: [{ id: 9, payload: { key: 'internal/publish/server', run: 'older' } }] });
+  await assert.rejects(begin(fake, plan(), 'publish/server'), /unresolved/);
+  assert.equal(await begin(fake, plan(), 'ota/android'), 42);
 });
 
 test('legacy records cannot become current baselines or reservations', () => {

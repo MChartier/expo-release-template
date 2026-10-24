@@ -108,8 +108,10 @@ export function operationPayload(plan, operation) {
 /** Record intent before calling a provider; any prior unresolved request requires operator resolution. */
 export async function begin(client, plan, operation) {
   const payload = operationPayload(plan, operation);
-  const previous = await client.pages(`deployments?task=expo-release-v3&environment=${encodeURIComponent(payload.key)}`);
+  const previous = await client.pages('deployments?task=expo-release-v3');
   for (const deployment of previous) {
+    assert(typeof deployment.payload?.key === 'string', 'Malformed operation identity; resolve its evidence before continuing.');
+    if (!deployment.payload.key.endsWith(`/${operation}`)) continue;
     const statuses = await client.api('GET', `deployments/${deployment.id}/statuses?per_page=1`);
     const state = statuses[0]?.state ?? 'pending';
     assert(['success', 'failure'].includes(state) && deployment.payload?.run !== plan.run,

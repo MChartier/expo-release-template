@@ -68,7 +68,8 @@ export function selectRelease(config, profile, observation, history = {}, rebuil
     ...(native ? config.mobile.targets.flatMap(t => [`build/${t.id}`, ...(config.profiles[profile].submit ? [`submit/${t.id}`] : [])]) : []),
     ...ota.map(platform => `ota/${platform}`),
   ].map(key => `${profile}/${key}`);
-  const unresolved = (history.pending ?? []).filter(key => operations.includes(key));
+  const operation = key => key.slice(key.indexOf('/') + 1);
+  const unresolved = (history.pending ?? []).filter(key => operations.some(selected => operation(selected) === operation(key)));
   assert(!unresolved.length, `Resolve uncertain operations in GitHub/provider tools before continuing: ${unresolved.join(', ')}`);
   return {
     format: 3, profile, server, native, ota, bump, runtime, pair, operations,

@@ -102,6 +102,12 @@ test('profiles get independent success baselines without separate semantic versi
   assert.ok(!result.operations.some(key => key.includes('/submit/')));
 });
 
+test('changing profile cannot bypass an unresolved request for the same operation and target', () => {
+  const previous = history(); previous.pending.push('internal/publish/server');
+  const input = observation(); input.server = 'new-server';
+  assert.throws(() => selectRelease(config(), 'production', input, previous), /internal\/publish\/server/);
+});
+
 test('Calibrate reserves odd/even numbers above seeded and failed reservations', () => {
   const value = config(); value.mobile.pairCodeFloor = 18; value.server.metadataOnNative = true;
   const previous = history(); previous.mobile.pairCodeFloor = 103;
