@@ -3,10 +3,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { prepare, hook } from '../src/source.mjs';
+import { prepare, hook, exportBundle } from '../src/source.mjs';
 import { configured, loadConfig } from '../src/config.mjs';
 import { selectRelease } from '../src/engine.mjs';
-import { repository, config, observation, temporary } from './helpers.mjs';
+import { repository, config, observation, temporary, plan } from './helpers.mjs';
 
 /** Prepare a server-only source fixture so commit behavior needs no provider or Expo installation. */
 function source(t, unsafe = false) {
@@ -66,4 +66,28 @@ test('minimal serverless Expo fixture selects only its enabled Android release p
   const input=observation();input.fingerprints.internal={android:'a'.repeat(40)};
   const result=selectRelease(value,'internal',input);
   assert.equal(result.server,false);assert.equal(result.versions.mobile,'1.0.0');assert.deepEqual(result.operations,['internal/build/android']);
+});
+
+test('OTA inspection and export use the same explicit profile/platform with no publishing token', t => {
+  const repo = repository(t), release = plan(), output = path.join(repo.root, 'export');
+  const expo = { owner: 'owner', slug: 'app', version: '1.0.0', runtimeVersion: '1',
+    extra: { eas: { projectId: release.config.mobile.projectId } }, android: { package: 'app.example.mobile' } };
+  repo.save('package.json', '{"private":true}');
+  repo.save('node_modules/expo/package.json', '{"name":"expo"}');
+  repo.save('node_modules/expo/bin/cli', `/** @file Test SDK executable boundary. */
+const fs=require('node:fs'),path=require('node:path');
+if(process.env.EAS_BUILD_PLATFORM!=='android'||process.env.EAS_BUILD_PROFILE!=='production'||process.env.EXPO_TOKEN)throw Error('wrong source environment');
+if(process.argv[2]==='config')console.log(JSON.stringify(${JSON.stringify(expo)}));
+else { const directory=process.argv[process.argv.indexOf('--output-dir')+1];fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(path.join(directory,'bundle.js'),'exact bundle'); }
+`);
+  repo.save('node_modules/@expo/fingerprint/package.json', '{"name":"@expo/fingerprint","main":"index.js"}');
+  repo.save('node_modules/@expo/fingerprint/index.js', `/** @file Test SDK fingerprint boundary. */
+exports.createFingerprintAsync=async()=>({hash:'${'a'.repeat(40)}'});`);
+  const previous = process.env.EXPO_TOKEN; process.env.EXPO_TOKEN = 'publication-secret';
+  try {
+    exportBundle(repo.root, release, 'android', output);
+    assert.equal(fs.readFileSync(path.join(output, 'bundle.js'), 'utf8'), 'exact bundle');
+    const metadata = JSON.parse(fs.readFileSync(path.join(output, 'expo-release.json')));
+    assert.equal(metadata.runtime, '1'); assert.equal(metadata.version, '1.0.0');
+  } finally { if (previous === undefined) delete process.env.EXPO_TOKEN; else process.env.EXPO_TOKEN = previous; }
 });

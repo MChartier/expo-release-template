@@ -89,6 +89,7 @@ export function exportBundle(root, plan, platform, directory) {
     'Export is incompatible with the planned runtime.');
   const app = within(root, config.mobile.directory), require = createRequire(path.join(app, 'package.json'));
   run(process.execPath, [path.join(path.dirname(require.resolve('expo/package.json')), 'bin/cli'), 'export', '--platform', platform,
-    '--output-dir', path.resolve(directory)], { cwd: app, env: sourceEnvironment({ ...config.profiles[profile].publicEnvironment, ...plan.environments[profile] }), stdio: 'inherit' });
+    '--output-dir', path.resolve(directory)], { cwd: app, env: sourceEnvironment({ ...config.profiles[profile].publicEnvironment, ...plan.environments[profile],
+      EAS_BUILD_PLATFORM: platform, EAS_BUILD_PROFILE: config.profiles[profile].easProfile }), stdio: 'inherit' });
   writeJson(path.join(directory, 'expo-release.json'), { expo: current.expo, runtime: plan.runtime, version: plan.versions.mobile, platform });
 }
